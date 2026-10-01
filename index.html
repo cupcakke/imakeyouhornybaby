@@ -6513,22 +6513,11 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
 
   function splitAssistantMessage(message){
     var rawContent = message && message.content != null ? message.content : "";
-    var thinking = typeof message.reasoning_content === "string" ? message.reasoning_content : (typeof message.thinking === "string" ? message.thinking : "");
-    if(Array.isArray(rawContent)) return {content:rawContent, thinking:thinking.trim()};
+    if(Array.isArray(rawContent)) return {content:rawContent, thinking:""};
     var content = typeof rawContent === "string" ? rawContent : String(rawContent);
-    var thoughtPattern = /<think>([\s\S]*?)<\/think>/g;
-    var parts = [];
-    var match;
-    while((match = thoughtPattern.exec(content)) !== null) parts.push(match[1].trim());
-    content = content.replace(/<think>[\s\S]*?<\/think>/g, "");
-    var openIndex = content.indexOf("<think>");
-    if(openIndex >= 0){
-      var partial = content.slice(openIndex + 7).trim();
-      if(partial) parts.push(partial);
-      content = content.slice(0, openIndex);
-    }
-    if(parts.length) thinking = thinking ? thinking + "\n" + parts.join("\n") : parts.join("\n");
-    return {content:content.trim(), thinking:thinking.trim()};
+    content = content.replace(/<think>[\s\S]*?<\/think>/gi, "");
+    content = content.replace(/<think>[\s\S]*$/gi, "");
+    return {content:content.trim(), thinking:""};
   }
 
   function contentToDisplay(content){
@@ -6575,23 +6564,20 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
   }
 
   function timelineHtml(message){
-    var steps = Array.isArray(message.timeline) ? message.timeline.slice(-8) : [];
-    if(message.isStreaming && !steps.length) steps.push({type:"thought", text:""});
+    var steps = Array.isArray(message.timeline) ? message.timeline.filter(function(step){ return step && step.type === "tool"; }).slice(-8) : [];
     if(!steps.length) return "";
-    return '<div class="cot-timeline">' + steps.map(function(step){
-      var icon = step.type === "tool" ? "↗" : (step.type === "done" ? "✓" : "•");
-      return '<div class="cot-step ' + escapeAttr(step.type || "thought") + '"><span class="cot-step-icon">' + icon + '</span><span class="cot-step-text">' + escapeHtml(step.text || "") + '</span></div>';
+    return '<div class="cot-timeline" aria-label="Eszközhívások">' + steps.map(function(step){
+      return '<div class="cot-step tool"><span class="cot-step-icon">↗</span><span class="cot-step-text">' + escapeHtml(step.text || "Eszközhívás") + '</span></div>';
     }).join("") + '</div>';
   }
 
   function addTimeline(message, type, text){
+    if(type !== "tool") return;
     if(!message.timeline) message.timeline = [];
+    var value = String(text || "Eszközfolyamat");
     var last = message.timeline[message.timeline.length - 1];
-    if(type === "thought" && last && last.type === "thought" && last.text.length < 240 && String(text).indexOf("\n") === -1){
-      last.text += text;
-      return;
-    }
-    message.timeline.push({type:type, text:String(text || "")});
+    if(last && last.type === "tool" && last.text === value) return;
+    message.timeline.push({type:"tool", text:value});
     if(message.timeline.length > 16) message.timeline.shift();
   }
 
@@ -6762,15 +6748,12 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
         var textBubble = display.text ? '<div class="bubble lg user-message-collapsible"><div class="user-message-text">' + markdown(display.text) + '</div></div>' : '';
         return '<div class="msg-group u" role="listitem">' + renderMessageImages(display.images, messageIndex, false) + renderTextFiles(display.textFiles, messageIndex) + textBubble + '<div class="msg-actions"><button type="button" class="msg-edit" data-edit-index="' + messageIndex + '">Szerkesztés</button></div>' + branchNav + '</div>';
       }
-      var thinking = parsed.thinking;
-      var showThinking = !!thinking || !!message.isStreaming || (Array.isArray(message.timeline) && message.timeline.length);
-      var workLabel = message.workTask ? (message.isStreaming ? "Work folyamatban…" : "Work eredménye") : (message.isStreaming ? "Gondolkodás folyamatban…" : "Gondolkodás");
-      var thinkingHtml = showThinking ? '<details class="thinking lg cot-glass" data-thinking-index="' + messageIndex + '"' + (message.thinkingOpen ? ' open' : '') + '><summary><span class="cot-head"><span>' + workLabel + '</span><span class="cot-clock">' + formatThinkingTime(message) + '</span></span></summary><div class="thinking-text">' + (thinking ? markdown(thinking) : (message.isStreaming ? '<span>Work-feladat folyamatban…</span>' : '')) + timelineHtml(message) + '</div></details>' : '';
+      var toolTimeline = timelineHtml(message);
       var pending = message.imageRequestPending ? '<div class="image-request-pending">' + (message.imageOperation === "edit" ? "A kép szerkesztése folyamatban…" : "A kép létrehozása folyamatban…") + '</div>' : '';
       var body = message.isError ? '<div class="err-bbl">' + markdown(display.text) + '</div>' : '<div class="ai-bubble md">' + markdown(display.text) + '</div>';
       var hasEarlierUser = messages.slice(0, messageIndex).some(function(item){ return item.role === "user"; });
       var regenerate = !message.isStreaming && hasEarlierUser ? '<div class="msg-actions work-message-actions"><button type="button" class="msg-regenerate" data-regenerate-index="' + messageIndex + '">Újragenerálás</button></div>' : '';
-      return '<div class="msg-group a" role="listitem">' + thinkingHtml + pending + body + renderMessageImages(display.images, messageIndex, !!message.generatedImagePresentation) + regenerate + branchNav + '</div>';
+      return '<div class="msg-group a" role="listitem">' + toolTimeline + pending + body + renderMessageImages(display.images, messageIndex, !!message.generatedImagePresentation) + regenerate + branchNav + '</div>';
     }).join("");
     bindRichContent();
     updateScrollButton();
@@ -8121,13 +8104,14 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
      var group = messageList.querySelectorAll(".msg-group")[index];
      if(!group){ render(); return; }
      var parsed = splitAssistantMessage({content:message.content, reasoning_content:message.thinking});
-     var details = group.querySelector(".thinking");
-     if(details){
-       var thinkingText = details.querySelector(".thinking-text");
-       if(thinkingText) thinkingText.innerHTML = (parsed.thinking ? markdown(parsed.thinking) : (message.isStreaming ? "<span>A modell gondolkodik…</span>" : "")) + timelineHtml(message);
-       if(!message.thinkingManual) details.open = !!message.thinkingOpen;
-       var clock = details.querySelector(".cot-clock");
-       if(clock) clock.textContent = formatThinkingTime(message);
+     var existingToolTimeline = group.querySelector(".cot-timeline");
+     var nextToolTimeline = timelineHtml(message);
+     if(existingToolTimeline){
+       if(nextToolTimeline) existingToolTimeline.outerHTML = nextToolTimeline;
+       else existingToolTimeline.remove();
+     }else if(nextToolTimeline){
+       var firstBody = group.querySelector(".ai-bubble, .err-bbl");
+       if(firstBody) firstBody.insertAdjacentHTML("beforebegin", nextToolTimeline);
      }
      var body = group.querySelector(".ai-bubble, .err-bbl");
      if(body) body.innerHTML = markdown(contentToDisplay(parsed.content).text);
@@ -8268,7 +8252,6 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
         streamingMessage.content = parsedMessage.content;
         streamingMessage.thinking = parsedMessage.thinking;
         streamingMessage.thinkingEndedAt = Date.now();
-        addTimeline(streamingMessage, "done", "Válasz elkészült");
       }else{
         if(!response.body) throw new Error("A böngésző nem támogatja a válasz streamelését.");
         reader = response.body.getReader();
@@ -8292,8 +8275,6 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
             return;
           }
           if(event.type === "route"){
-            var routeText = event.intent ? "Terv: " + event.intent : "A stratégiai modell elkészítette a tervet";
-            addTimeline(streamingMessage, "thought", routeText);
             scheduleStreamRender(streamingMessage);
             return;
           }
@@ -8307,7 +8288,7 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
               timelineType = "tool";
             }else if(eventType === "tool_result"){
               label = (agentEvent.ok === false ? "Eszközhiba" : "Eszköz kész") + (agentEvent.tool ? ": " + agentEvent.tool : "");
-              timelineType = agentEvent.ok === false ? "thought" : "done";
+              timelineType = "tool";
             }else if(eventType === "model_start"){
               label = "Modell: " + (agentEvent.model || "specialista");
             }else if(eventType === "model_output"){
@@ -8331,7 +8312,7 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
                 streamingMessage.content += "\n\n[" + artifactName + "](/api/artifacts/" + encodeURIComponent(artifact.artifact_id) + ")";
               }
             }
-            addTimeline(streamingMessage, timelineType, label);
+            if(timelineType === "tool") addTimeline(streamingMessage, "tool", label);
             scheduleStreamRender(streamingMessage);
             return;
           }
@@ -8340,16 +8321,16 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
             event = {
               type: "delta",
               content: typeof delta.content === "string" ? delta.content : undefined,
-              reasoning_content: typeof delta.reasoning_content === "string" ? delta.reasoning_content : (typeof delta.reasoning === "string" ? delta.reasoning : undefined)
+              reasoning_content: typeof delta.reasoning_content === "string" ? delta.reasoning_content : (typeof delta.reasoning === "string" ? delta.reasoning : undefined),
+              tool_call: delta.tool_call,
+              tool: delta.tool
             };
             if(event.choices && event.choices[0].finish_reason) event.type = "done";
           }
           if(event.type === "delta" || (!event.type && (event.content || event.reasoning_content))){
             receivedAny = true;
             if(typeof event.reasoning_content === "string" && event.reasoning_content){
-              streamingMessage.thinking += event.reasoning_content;
-              if(!streamingMessage.thinkingManual) streamingMessage.thinkingOpen = true;
-              addTimeline(streamingMessage, "thought", event.reasoning_content);
+              streamingMessage.thinkingEndedAt = streamingMessage.thinkingEndedAt || Date.now();
             }
             if(typeof event.content === "string" && event.content){
               streamingMessage.content += event.content;
@@ -8369,7 +8350,6 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
             throw new Error(event.message || "A modell streamelése megszakadt.");
           }else if(event.type === "done"){
             streamingMessage.thinkingEndedAt = streamingMessage.thinkingEndedAt || Date.now();
-            addTimeline(streamingMessage, "done", "Befejezés ✓");
             streamDone = true;
           }
         }
@@ -8584,14 +8564,14 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
     if(event.type === "meta"){
       if(event.job_id) activeChatJobId = event.job_id;
     }else if(event.type === "route"){
-      addTimeline(message, "thought", event.intent ? "Terv: " + event.intent : "A Work-feladat terve frissült");
+      return;
     }else if(event.type === "agent_event"){
       var agentEvent = event.event || {};
       var type = agentEvent.type || "agent_event";
       var label = "Work-feladat";
       var kind = "thought";
       if(type === "tool_start"){ label = "Eszköz: " + (agentEvent.tool || "művelet"); kind = "tool"; }
-      else if(type === "tool_result"){ label = (agentEvent.ok === false ? "Eszközhiba: " : "Eszköz kész: ") + (agentEvent.tool || "művelet"); kind = agentEvent.ok === false ? "thought" : "done"; }
+      else if(type === "tool_result"){ label = (agentEvent.ok === false ? "Eszközhiba: " : "Eszköz kész: ") + (agentEvent.tool || "művelet"); kind = "tool"; }
       else if(type === "model_start"){ label = "Modell: " + (agentEvent.model || "specialista"); }
       else if(type === "model_output"){ label = "A modellválasz elkészült"; }
       else if(type === "subagent_done"){ label = "Részfeladat elkészült"; kind = "done"; }
@@ -8609,9 +8589,7 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
       addTimeline(message, kind, label);
     }else if(event.type === "delta" || (!event.type && (event.content || event.reasoning_content))){
       if(typeof event.reasoning_content === "string"){
-        message.thinking += event.reasoning_content;
-        message.thinkingOpen = true;
-        addTimeline(message, "thought", event.reasoning_content);
+        message.thinkingEndedAt = message.thinkingEndedAt || Date.now();
       }
       if(typeof event.content === "string"){
         message.content += event.content;

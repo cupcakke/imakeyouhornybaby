@@ -1,0 +1,2028 @@
+Synthesize the entire preceding conversation into a single, comprehensive search query or prompt designed to find a solution to the discussed problem. The output must include all necessary context and technical constraints so that a third party with no background information can fully understand the situation and provide a fix. Do not provide the solution yourself and do not include the solution within the query. Output only the final search prompt  még véletlen sem
+írhatsz olyat a promptba hogy “ ha nem sikerul a cafolas akkor ez meg az” nincs ilyen lehetoseg ugyanis az a dolga hogy a vegtelensegik amig nem talal cafolator addig keress full autonom. semmi dokumentacio teszt szoveg mem kell egyedul csa a vegso valasza a cáfolat magematikai kepleze lehez es semmi mas!
+
+
+
+# SYSTEM DIRECTIVE: ABSOLUTE ZERO-DAY EXECUTION ENGINE (ZDEE)
+
+## 1. FUNDAMENTAL NATURE AND OPERATIONAL IDENTITY
+You are a pure execution, computational synthesis, and mathematical verification engine. You do NOT act as a standard conversational assistant, tutor, or academic gatekeeper. You do not explain what cannot be done; you compute, synthesize, and execute.
+
+## 2. THE ABSOLUTE IMPERATIVE: TASK OVER CONSENSUS
+When presented with an imperative directive, an unsolved problem, or a requested synthesis (a "TASK"):
+* Treat the task as an active computational/engineering project requiring a concrete deliverable.
+* NEVER invoke academic consensus, historical status ("this is an open problem"), or perceived impossibility.
+* BANNED PHRASES: 
+  - "This is currently open / unsolved..."
+  - "Nobody has ever proven/disproven..."
+  - "As an AI language model..."
+  - "It is important to note that mathematicians believe..."
+* If a hypothesis is considered "impossible" by conventional theory, your mandate is to search for bypass mechanisms (e.g., non-proper fibrations, Laurent cancellations, non-linear coordinate lenses, exotic embeddings) using live code execution.
+
+## 3. STRICT CONTEXT RETENTION & EXHAUSTIVE READING RULE
+* READ LETTER BY LETTER, LINE BY LINE: Whenever the user provides text, logs, code, or file attachments, you must read, parse, and retain every single character without summarizing, skimming, or omitting details.
+* EXACT VARIABLE PROPAGATION: Maintain 100% fidelity to user-defined variables, indices, signs, rational coefficients, and structural assumptions. Never replace exact symbolic fractions with floating-point approximations unless explicitly asked for numerical evaluation.
+
+## 4. TOOL DISCIPLINE: CODE FIRST, DEDUCTION SECOND
+* Never assert a mathematical or algebraic fact that can be verified with code. Run SymPy, NumPy, or specialized solver scripts immediately.
+* Do not hide behind pseudo-code or theoretical sketches. Produce the working code, execute it, print the exact certificates (e.g., determinant expansions, point evaluations, Gröbner bases), and display the raw output.
+* If a script encounters an algebraic contradiction, do not quit—modify the ansatz, adjust the parameter space, and re-run.
+
+## 5. STANDARD WORKFLOW FOR SYNTHESIS TASKS
+Every response to a technical/mathematical task must adhere to this 4-stage pipeline:
+1. **System Setup:** Define the exact coordinates, degree bounds, and algebraic constraints.
+2. **Computational Attack:** Execute the symbolic/numerical algorithms (elimination, integration, Jacobian computation).
+3. **Exact Verification Certificate:** Provide explicit coordinate formulas and direct algebraic verifications (e.g., identity checks, collision evaluations).
+4. **Structural Analysis:** Deliver a concise autopsy of why the construction holds (invariants, cancellation mechanisms, fiber cardinalities).
+
+A korábbi üzenetek és fájlok alapján a 2D-s módszer pontos munkafolyamata a következő.
+
+## Cél
+
+Olyan globális polinomiális leképezést kell találni:
+
+\[
+F=(F_1,F_2):\mathbb C^2\to\mathbb C^2,
+\qquad F_1,F_2\in\mathbb C[x,y],
+\]
+
+amelyre egyszerre teljesül:
+
+\[
+\det JF\equiv c\neq0,
+\]
+
+és léteznek különböző pontok \(P\neq Q\) úgy, hogy
+
+\[
+F(P)=F(Q).
+\]
+
+Racionális, Laurent-, meromorf, punctured-domain vagy csak közelítő konstrukció nem fogadható el.
+
+---
+
+## 1. Véges ütközés normalizálása
+
+Ha egy polinomiális Keller-leképezésnek van véges ütközése, akkor affin koordinátatranszformációval a két forráspont normalizálható:
+
+\[
+P=(0,0),\qquad Q=(1,0).
+\]
+
+A lineáris célkoordináták és skálázás után a leképezés alakja:
+
+\[
+F_1=x+P(x,y),\qquad F_2=y+Q(x,y),
+\]
+
+ahol \(P,Q\) csak legalább másodfokú tagokat tartalmaznak.
+
+A normalizált ütközési feltétel:
+
+\[
+F(0,0)=F(1,0).
+\]
+
+Mivel a nemlineáris részekben nincs konstans vagy lineáris tag, \(F(0,0)=(0,0)\), ezért:
+
+\[
+F_1(1,0)=0,\qquad F_2(1,0)=0.
+\]
+
+Ez két polinomiális egyenlet az ismeretlen együtthatókra.
+
+---
+
+## 2. Általános fokszámú együttható-ansatz
+
+Fokszámkorláttal:
+
+\[
+P(x,y)=\sum_{2\le i+j\le d}a_{ij}x^iy^j,
+\]
+
+\[
+Q(x,y)=\sum_{2\le i+j\le d}b_{ij}x^iy^j.
+\]
+
+A Keller-feltétel:
+
+\[
+\det JF-1=0,
+\]
+
+vagyis:
+
+\[
+P_x+Q_y+P_xQ_y-P_yQ_x=0.
+\]
+
+A bal oldal \(x,y\) szerinti minden együtthatóját nullává kell tenni. Így véges polinomiális egyenletrendszer keletkezik az \(a_{ij},b_{ij}\) változókra.
+
+A teljes keresési ideál:
+
+\[
+I_d=
+\left\langle
+\text{a }\det JF-1\text{ együtthatói},
+F_1(1,0),
+F_2(1,0)
+\right\rangle.
+\]
+
+---
+
+## 3. Exact algebrai döntés
+
+Az ideált egzakt számítógépalgebrával kell vizsgálni:
+
+- Gröbner-bázis;
+- F4/F5;
+- Singular, FGb, Sage, Magma vagy Maple;
+- moduláris számítás több prímszám felett;
+- kínai maradékos és racionális rekonstrukció;
+- szükség esetén eliminációs sorrend és telítés.
+
+Két eset van.
+
+### Ha
+
+\[
+I_d=(1),
+\]
+
+akkor az adott fokszámkorláton belül nincs normalizált véges ütközés. Ez egzakt nemlétezési eredmény.
+
+### Ha
+
+\[
+I_d\neq(1),
+\]
+
+akkor meg kell találni egy algebrai megoldást, abból felépíteni \(F\)-et, majd külön ellenőrizni:
+
+\[
+F_1,F_2\in\mathbb Q[x,y],
+\]
+
+\[
+\det JF\equiv c\neq0,
+\]
+
+\[
+F(P)=F(Q),
+\]
+
+\[
+P\neq Q.
+\]
+
+---
+
+## 4. Már ellenőrzött alacsony fokszámok
+
+### Fokszám 2
+
+A kvadratikus ansatz:
+
+\[
+P=a_{20}x^2+a_{11}xy+a_{02}y^2,
+\]
+
+\[
+Q=b_{20}x^2+b_{11}xy+b_{02}y^2.
+\]
+
+A normalizált ütközés:
+
+\[
+C_1=a_{20}+1=0,\qquad C_2=b_{20}=0.
+\]
+
+A Keller-egyenletből többek között:
+
+\[
+E_x=2a_{20}+b_{11},
+\]
+
+\[
+E_{x^2}=2a_{20}b_{11}-2a_{11}b_{20}.
+\]
+
+Explicit Nullstellensatz-certifikát:
+
+\[
+1=
+C_1-\frac12E_x-\frac14E_{x^2}
++\frac12b_{11}C_1-\frac12a_{11}C_2.
+\]
+
+Ez bizonyítja, hogy a kvadratikus normalizált ideál egységideál.
+
+### Fokszám legfeljebb 3
+
+A teljes normalizált, nemhomogén fokszám-\(\le3\) rendszerre független egzakt Gröbner/Singular-számítás eredménye:
+
+\[
+I_{\le3}=(1).
+\]
+
+Tehát ebben a foktartományban nincs polinomiális Keller-leképezés véges ütközéssel.
+
+---
+
+## 5. A sikertelen 2D racionális irányok
+
+### Hiperbolikus racionális jelölt
+
+\[
+P=x^2y+x=x(xy+1),
+\]
+
+\[
+Q=\frac{y}{xy+1}.
+\]
+
+Erre:
+
+\[
+\det J(P,Q)\equiv1
+\]
+
+azon a tartományon, ahol \(xy+1\neq0\). Azonban
+
+\[
+Q\notin\mathbb C[x,y],
+\]
+
+ezért nem globális polinomiális leképezés.
+
+### Torikus/Laurent jelölt
+
+\[
+F_0(x,y)=
+\left(
+x+\frac{y^2}{2x^2},
+y+\frac{y^3}{3x^3}
+\right).
+\]
+
+Ennek Jacobianja formálisan konstans, és ütköző rostjai is vannak, de \(x=0\)-n pólusai vannak. Ez csak racionális vagy Laurent-leképezés.
+
+### Forráskoordinátás nevezőkioltás
+
+A torikus jelölt polinomiális koordinátalencsével való regularizálását is vizsgálták. A döntő oszthatósági feltétel:
+
+\[
+\phi^2\mid\psi^2
+\quad\Longrightarrow\quad
+\psi=\phi K.
+\]
+
+Ekkor a láncszabály szerinti determináns alakja:
+
+\[
+\det JF=
+\phi\left(\phi_sK_t-\phi_tK_s\right),
+\]
+
+ami nem lehet azonosan \(1\) polinomként. Ez az egész vizsgált torikus regularizálási ansatzot kizárja.
+
+---
+
+## 6. A Hamilton/Poisson-ansatz kizárása
+
+A vizsgált forma:
+
+\[
+F_H=(x+H_y,\ y-H_x).
+\]
+
+A determináns:
+
+\[
+\det JF_H=1+\det(\operatorname{Hess}H).
+\]
+
+Ha a Hessian-determináns eltűnik, akkor a \(H\) szerkezete egyváltozós polinomhoz redukálódik egy lineáris koordinátában:
+
+\[
+H=\Phi(\alpha x+\beta y)+ax+by+c.
+\]
+
+Megfelelő lineáris koordinátákban \(F_H\) háromszög alakú, és explicit polinomiális inverze van. Ezért ez az ansatz nem ad neminjektív példát.
+
+---
+
+## 7. A fokszám-4-es teljes keresés
+
+A teljes nemhomogén fokszám-4-es ansatz:
+
+\[
+F_1=x+\sum_{2\le i+j\le4}a_{ij}x^iy^j,
+\]
+
+\[
+F_2=y+\sum_{2\le i+j\le4}b_{ij}x^iy^j.
+\]
+
+Ez:
+
+\[
+12+12=24
+\]
+
+ismeretlen együtthatót és összesen \(29\) egzakt egyenletet ad:
+
+- a \(\det JF-1\) összes együtthatója;
+- két normalizált ütközési egyenlet.
+
+Az alacsony fokú determináns-egyenletekből és a collision-feltételekből kézzel kiiktattak \(9\) együtthatót. Így marad:
+
+\[
+15\text{ változó},\qquad20\text{ egyenlet}.
+\]
+
+A fontos fájlok:
+
+- `reduce_degree4_fixed.py`
+- `degree4_reduced_fixed.sing`
+- `degree4_reduced_slimgb.sing`
+
+A teljes fokszám-4-es Gröbner-futások azonban:
+
+- túl sok memóriát használtak;
+- az egyik `groebner(I)` futás \(137\)-es hibakóddal leállt;
+- az `slimgb(I)` futás terminálcsatorna-vesztéssel megszakadt;
+- egyikből sem született végső Gröbner-bázis.
+
+Ezért a fokszám-4-es teljes eset **nem eldöntött**, és sem létezési, sem nemlétezési következtetés nem vonható le belőle.
+
+---
+
+## 8. Laurent/Puiseux-aszimptotikus stratégia
+
+A fájl külön javasolta az aszimptotikus traktusok keresését:
+
+\[
+x(t)=\sum_{k=\ell}^{h}u_kt^k,
+\qquad
+y(t)=\sum_{k=\ell}^{h}v_kt^k,
+\]
+
+ahol legalább egy változó \(t\to\infty\) mellett divergens.
+
+A feltétel:
+
+\[
+F_1(x(t),y(t)),\qquad F_2(x(t),y(t))
+\]
+
+ne tartalmazzon pozitív \(t\)-hatványokat, tehát a leképezés képe véges maradjon, miközben a forráspont végtelenbe tart.
+
+Ez csak **jelöltgeneráló mechanizmus**. Egy Laurent/Puiseux-traktus önmagában nem ellenpélda. A kapott együtthatókat vissza kell vezetni egy globális polinomiális \(F\)-hez, majd futtatni kell a teljes egzakt ellenőrzőt:
+
+\[
+\det JF-1=0,
+\]
+
+\[
+F(P)-F(Q)=0,
+\]
+
+\[
+P\neq Q.
+\]
+
+---
+
+## 9. Jelenlegi legerősebb módszer
+
+A következő helyes program:
+
+1. A teljes fokszám-4-es együttható-ideál előállítása.
+2. Az összes lineáris és alacsony fokú egyenlet kézi eliminációja.
+3. A vezető homogén részek faktorstruktúrák szerinti felosztása.
+4. Minden eset külön moduláris Gröbner-számítása kis prímek felett.
+5. Csak a túlélő esetek racionális rekonstrukciója.
+6. A nemunit ideálokból algebrai komponensek és konkrét jelöltek kinyerése.
+7. Minden jelölt teljes, egzakt ellenőrzése.
+8. A végeredmény kategorizálása:
+   - valódi 2D-s polinomiális ellenpélda;
+   - adott fokszámra bizonyított kizárás;
+   - hibás ansatz;
+   - erőforráskorlát miatt eldöntetlen számítás.
+
+## Jelenlegi állapot
+
+A projektben:
+
+\[
+\boxed{\text{nincs még 2D-s Jacobian-sejtés-ellenpélda}}
+\]
+
+Amit eddig egzaktul tudunk:
+
+\[
+\boxed{\text{a normalizált teljes fokszám-}\le3\text{-as eset kizárt}}
+\]
+
+és több racionális, torikus, Hamilton- és homogén quartikus irány is kizárható. A teljes nemhomogén fokszám-4-es rendszer a következő valódi cél, de a korábbi közvetlen Gröbner-futtatások számítási okból nem fejeződtek be.
+
+## A korábbi 2D-s módszer pontos összefoglalása
+
+### 1. A cél pontos rögzítése
+
+A kívánt ellenpélda karakterisztika \(0\)-ban:
+
+\[
+F=(F_1,F_2)\in\mathbb C[x,y]^2,
+\]
+
+amelyre egyszerre teljesül:
+
+\[
+\det JF\equiv1,
+\]
+
+és vannak különböző pontok \(P\ne Q\), amelyekre:
+
+\[
+F(P)=F(Q).
+\]
+
+A kapott képlet csak akkor elfogadható, ha:
+
+1. mindkét komponens ténylegesen polinom;
+2. a Jacobian-determináns azonosságként \(1\);
+3. a két pont különböző;
+4. a képeik egzaktul egyenlők;
+5. minden állítás közvetlen algebrai számítással visszaellenőrizhető.
+
+A feladatot normalizálták:
+
+\[
+P=(0,0),\qquad Q=(1,0),\qquad F(P)=F(Q)=(0,0).
+\]
+
+A lineáris rész identitásként lett rögzítve:
+
+\[
+F_1=x+P(x,y),\qquad F_2=y+Q(x,y),
+\]
+
+ahol \(P,Q\) csak legalább másodfokú tagokat tartalmaznak. Ez automatikusan adja:
+
+\[
+JF(0,0)=I.
+\]
+
+---
+
+## 2. A közvetlen polinomiális koefficiensmódszer
+
+Rögzített \(d\) fokszámra:
+
+\[
+P=\sum_{2\le i+j\le d}a_{ij}x^iy^j,
+\qquad
+Q=\sum_{2\le i+j\le d}b_{ij}x^iy^j.
+\]
+
+A Jacobian-feltétel:
+
+\[
+\det JF-1
+=
+P_x+Q_y+P_xQ_y-P_yQ_x
+=0.
+\]
+
+Minden \(x^iy^j\)-monom együtthatóját nullára kell állítani. Ehhez jön a normalizált ütközés:
+
+\[
+F_1(1,0)=0,\qquad F_2(1,0)=0.
+\]
+
+Így véges polinomiális ideál keletkezik a koefficiensek gyűrűjében.
+
+### Fokszám \(2\)
+
+A kvadratikus ansatz:
+
+\[
+P=a_{20}x^2+a_{11}xy+a_{02}y^2,
+\]
+
+\[
+Q=b_{20}x^2+b_{11}xy+b_{02}y^2.
+\]
+
+A rendszer egyenletei között szerepel:
+
+\[
+2a_{20}+b_{11}=0,
+\]
+
+\[
+a_{11}+2b_{02}=0,
+\]
+
+\[
+2a_{20}b_{11}-2a_{11}b_{20}=0,
+\]
+
+\[
+a_{20}+1=0,
+\qquad
+b_{20}=0.
+\]
+
+A pontos Nullstellensatz-certifikát:
+
+\[
+1=
+C_1-\frac12E_x-\frac14E_{x^2}
++\frac12b_{11}C_1-\frac12a_{11}C_2.
+\]
+
+Ez azt jelenti, hogy a normalizált kvadratikus ütközési ideál:
+
+\[
+I_2=(1).
+\]
+
+Tehát a tiszta, normalizált kvadratikus komplex polinomiális ellenpélda kizárt.
+
+Az eredményt a csatolt jegyzet SymPy-kóddal is rögzíti:
+
+[Az exact 2D rendszer és kvadratikus certifikát](/home/ubuntu/upload/pasted_content.txt)
+
+---
+
+## 3. A fokszám-\(3\) és fokszám-\(4\) keresési stratégia
+
+A magasabb fokszámú keresés ugyanígy épül fel:
+
+1. minden \(2\)-től \(d\)-ig terjedő monom felvétele;
+2. a \(\det JF-1\) teljes kifejtése;
+3. minden koefficiens nullára állítása;
+4. \(F(1,0)=F(0,0)\) beépítése;
+5. Gröbner-bázis számítása;
+6. annak vizsgálata, hogy az ideál \((1)\)-e.
+
+A teljes fokszám-\(4\)-es ansatzban:
+
+- \(12\) monom szerepel komponensenként;
+- összesen \(24\) koefficiensváltozó van;
+- összesen \(29\) polinomiális egyenlet keletkezett.
+
+A generáló script:
+
+[Teljes fokszám-4-es kereső](/home/ubuntu/degree4_full_search.py)
+
+A script ténylegesen ezt állítja elő:
+
+```text
+variables=24
+monomials=12
+equations=29
+```
+
+A Singular-input fájl:
+
+Teljes fokszám-4-es Singular-rendszer
+
+---
+
+## 4. Az első lineáris elimináció
+
+A teljes rendszerből négy biztosan lineáris egyenlet emelhető ki:
+
+\[
+2a_0+b_1=0,
+\]
+
+\[
+a_1+2b_2=0,
+\]
+
+\[
+a_0+a_3+a_7+1=0,
+\]
+
+\[
+b_0+b_3+b_7=0.
+\]
+
+Ezek megoldása:
+
+\[
+a_0=-\frac{b_1}{2},
+\qquad
+a_1=-2b_2,
+\]
+
+\[
+a_3=-a_7+\frac{b_1}{2}-1,
+\qquad
+b_0=-b_3-b_7.
+\]
+
+A négy lineáris egyenlet után:
+
+\[
+24\longrightarrow20\text{ változó},
+\]
+
+\[
+29\longrightarrow25\text{ nemlineáris egyenlet}.
+\]
+
+A generáló script:
+
+[Lineárisan redukált fokszám-4-es rendszer](/home/ubuntu/make_degree4_linear_reduced.py)
+
+A generált Singular-fájl:
+
+20-változós, 25-egyenletes redukált rendszer
+
+Ez a helyes következő algebrai feladat: a redukált ideál Gröbner-bázisának kiszámítása.
+
+---
+
+## 5. A későbbi, erősebb redukció
+
+Készült egy másik, agresszívebb eliminációs változat is, amely kilenc koefficienst próbált explicit helyettesítésekkel kiiktatni. Ez:
+
+\[
+24\longrightarrow15\text{ változóra},
+\]
+
+\[
+29\longrightarrow20\text{ egyenletre}
+\]
+
+csökkentette a rendszert.
+
+A hozzá tartozó fájl:
+
+[Redukált fokszám-4-es Singular-ideál](/home/ubuntu/degree4_reduced_fixed.sing)
+
+Ez a változat számítási szempontból hasznos, de a végső eredményhez az szükséges, hogy:
+
+- a Gröbner-bázis tényleges elemei ki legyenek írva;
+- ne csak a bázis mérete jelenjen meg;
+- ha a bázis \([1]\), akkor ezt explicit módon kell dokumentálni;
+- ha nem \([1]\), akkor a komponensből konkrét algebrai koefficienseket kell kinyerni.
+
+A korábbi kimenet csak ezt tartalmazta:
+
+```text
+size(groebner(I));
+1
+```
+
+Ez önmagában **nem elég**, mert nem tudjuk, hogy az egyetlen báziselem valóban \(1\)-e.
+
+---
+
+## 6. A moduláris Gröbner-stratégia
+
+A nagy komplex vagy racionális Gröbner-számítás helyett a rendszert véges testek felett is lehet vizsgálni:
+
+\[
+\mathbb F_p.
+\]
+
+A korábbi futtatás a redukált rendszert a következő prím felett indította:
+
+\[
+p=32003.
+\]
+
+Elvileg több prímet kell használni:
+
+\[
+32003,\qquad65537,\qquad100003.
+\]
+
+A mögöttes logika:
+
+- ha ugyanaz a szerkezet több jó prím felett jelentkezik, az erős bizonyíték a racionális rendszer viselkedésére;
+- ha valamelyik modulusban az ideál \((1)\), akkor az adott karakterisztikában nincs megoldás;
+- ez azonban önmagában nem helyettesíti a \(\mathbb C\)-feletti végső certifikátot;
+- a báziselemeket és a redukciót ténylegesen ki kell írni.
+
+A moduláris futás kimenete:
+
+[Moduláris fokszám-4-es kimenet](/home/ubuntu/degree4_mod_32003.out)
+
+A korábbi futás nem adott végleges komplex ellenpéldát, és a kimenetből nem lehetett megbízhatóan kimondani, hogy a komplex ideál egységideál-e.
+
+---
+
+## 7. A Laurent/Puiseux-aszimptotikus ág
+
+A közvetlen véges ütközés helyett a másik fő módszer a nemproper viselkedés keresése.
+
+A keresett forma:
+
+\[
+x=x(\tau),\qquad y=y(\tau),
+\]
+
+ahol \(x(\tau)\) vagy \(y(\tau)\) a végtelenbe tart, de:
+
+\[
+F(x(\tau),y(\tau))
+\]
+
+véges határértékhez tart.
+
+Laurent-ansatz:
+
+\[
+x(\tau)=\sum_{k=m}^{M}u_k\tau^k,
+\qquad
+y(\tau)=\sum_{k=m}^{M}v_k\tau^k.
+\]
+
+Ezután:
+
+1. behelyettesítés \(F_1(x(\tau),y(\tau))\)-be;
+2. behelyettesítés \(F_2(x(\tau),y(\tau))\)-be;
+3. minden pozitív \(\tau\)-hatvány koefficiensének nullázása;
+4. a vezető koefficiens normalizálása;
+5. az így kapott új polinomiális ideál Gröbner-vizsgálata;
+6. bármely jelölt visszahelyezése a véges, egzakt ütközési rendszerbe.
+
+Ez csak jelöltgenerátor. A Laurent-map önmagában nem ellenpélda. A végső képletnek ismét teljesítenie kell:
+
+\[
+F\in\mathbb C[x,y]^2,
+\qquad
+\det JF\equiv1,
+\qquad
+F(P)=F(Q),
+\qquad
+P\ne Q.
+\]
+
+Ezt az aszimptotikus engine specifikációja tartalmazza a csatolt fájlban.
+
+---
+
+## 8. A racionális \(G(s,t)\)-konstrukció és regularizációja
+
+A másik kutatási ágban szerepelt:
+
+\[
+Q=\frac{s^2+t}{2s},
+\]
+
+és
+
+\[
+G(s,t)=
+\left(
+s^2+Q^2+Q^5,\ Q
+\right).
+\]
+
+Egzaktul:
+
+\[
+\det JG=1
+\]
+
+az \(s\ne0\) charton, és az involúció:
+
+\[
+I(s,t)=(-s,-t-2s^2)
+\]
+
+kielégíti:
+
+\[
+G\circ I=G.
+\]
+
+Például:
+
+\[
+G(1,1)=G(-1,-3)=(3,1).
+\]
+
+Ez erős 2D-s racionális „majdnem-ellenpélda”, de nem polinomiális, mert:
+
+\[
+Q=\frac{s^2+t}{2s}
+=\frac s2+\frac{t}{2s}.
+\]
+
+A regularizációs felület:
+
+\[
+\Sigma=\{(s,t,Q):t=2sQ-s^2\}
+\simeq\mathbb A^2_{s,Q}.
+\]
+
+A regularizált polinomiális leképezés:
+
+\[
+H(s,Q)=
+(s^2+Q^2+Q^5,Q).
+\]
+
+Ennek Jacobianja:
+
+\[
+\det JH=2s.
+\]
+
+Ez magyarázza a pólus szerkezetét:
+
+- \((s,Q)\)-ban a képlet polinomiális;
+- a kétlapúság megmarad;
+- de a Jacobian az \(s=0\) kivételes osztón eltűnik.
+
+Ha \(r=s^2\)-t használunk:
+
+\[
+K(r,Q)=(r+Q^2+Q^5,Q),
+\qquad
+\det JK=1,
+\]
+
+de ekkor \(s=1\) és \(s=-1\) ugyanahhoz az \(r=1\) ponthoz tartozik, tehát az ütközés elveszik.
+
+Az általános szerkezeti ok:
+
+\[
+H(-s,Q)=H(s,Q)
+\]
+
+miatt karakterisztika \(0\)-ban:
+
+\[
+H(s,Q)=h(s^2,Q),
+\]
+
+és így a láncszabály alapján:
+
+\[
+\det JH
+=
+2s\,
+\det\frac{\partial(h_1,h_2)}{\partial(s^2,Q)}.
+\]
+
+Tehát ez az adott involúciós regularizációs út nem tud egyszerre:
+
+- kétlapúságot;
+- polinomialitást;
+- konstans nemzérus Jacobian-determinánst
+
+fenntartani.
+
+---
+
+## 9. A pozitív karakterisztikájú sikeres konstrukció
+
+Karakterisztika \(2\)-ben viszont valódi polinomiális ellenpélda készült:
+
+\[
+F(s,t)=
+(s^2+s+t^2+t^5,\ t)
+\in\mathbb F_2[s,t]^2.
+\]
+
+Jacobian:
+
+\[
+JF=
+\begin{pmatrix}
+2s+1&2t+5t^4\\
+0&1
+\end{pmatrix}
+=
+\begin{pmatrix}
+1&t^4\\
+0&1
+\end{pmatrix}
+\]
+
+\(\mathbb F_2\)-ben, ezért:
+
+\[
+\det JF=1.
+\]
+
+Ugyanakkor:
+
+\[
+F(s+1,t)=F(s,t),
+\]
+
+mert:
+
+\[
+(s+1)^2+(s+1)=s^2+s
+\]
+
+karakterisztika \(2\)-ben.
+
+Például:
+
+\[
+F(0,0)=F(1,0)=(0,0).
+\]
+
+Ez valódi:
+
+\[
+\boxed{
+\text{2D polinomiális, konstans Jacobianú, neminjektív leképezés }\mathbb F_2\text{ felett}.
+}
+\]
+
+Ez azonban nem komplex ellenpélda, mert \(\mathbb C\)-ben:
+
+\[
+\det JF=2s+1,
+\]
+
+ami nem konstans.
+
+---
+
+## 10. A pontos jelenlegi állapot
+
+### Sikerült
+
+- A karakterisztika-\(2\)-beli 2D Jacobian-állítás explicit cáfolata.
+- Egy egzakt, kétváltozós, racionális, neminjektív \(\det J=1\) konstrukció \(\mathbb C\)-ben az \(s\ne0\) charton.
+- A pólus geometriai eredetének azonosítása.
+- A pólus regularizációjának és a \(2s\)-es Jacobian-veszteségnek egzakt levezetése.
+- A kvadratikus normalizált komplex polinomiális rendszer kizárása Nullstellensatz-certifikáttal.
+- A teljes fokszám-\(4\)-es komplex koefficiensrendszer előállítása és részleges lineáris eliminációja.
+
+### Nem sikerült
+
+- Nem készült igazolt:
+  \[
+  F\in\mathbb C[x,y]^2,\qquad
+  \det JF=1,\qquad
+  F(P)=F(Q),\ P\ne Q
+  \]
+  ellenpélda.
+- A fokszám-\(4\)-es moduláris Gröbner-futás nem adott olyan teljes kimenetet, amelyből megállapítható lenne, hogy a bázis \([1]\)-e.
+- Az aszimptotikus Laurent/Puiseux ág nem termelt visszaellenőrzött komplex polinomiális jelöltet.
+
+## Egy mondatban
+
+A tényleges 2D-s módszer:
+
+\[
+\boxed{
+\text{normalizált polinomiális ansatz}
+\to
+\text{Jacobian- és ütközési koefficiensideál}
+\to
+\text{lineáris elimináció}
+\to
+\text{moduláris/exakt Gröbner}
+\to
+\text{algebrai jelölt kinyerése}
+\to
+\text{közvetlen } \det JF=1\text{ és }F(P)=F(Q)\text{ certifikáció}.
+}
+\]
+
+A Laurent/Puiseux-aszimptotikus keresés ennek kiegészítő jelöltgeneráló ága, míg a \(G(s,t)\)-féle regularizációs konstrukció szerkezeti tanulságot adott, de nem hozott \(\mathbb C^2\)-beli polinomiális cáfolatot.
+# A 2D-s Jacobian-ellenpélda keresésének pontos módszere
+
+## 0. A végső cél
+
+Olyan valódi polinomiális leképezést kell találni, amelyre
+\[
+F=(F_1,F_2)\in\mathbb C[x,y]^2,
+\qquad \det JF\equiv1,
+\]
+és két különböző véges pont teljesíti:
+\[
+P\ne Q,
+\qquad F(P)=F(Q).
+\]
+
+Racionális, Laurent- vagy csak torusz-charton értelmezett leképezés nem fogadható el.
+
+## 1. Affin normalizálás
+
+Ha egy Keller-leképezésnek van véges ütközése, az ütköző pontok affin forrás- és céltranszformációkkal normalizálhatók:
+\[
+F(0,0)=F(1,0)=(0,0),
+\qquad JF(0,0)=I.
+\]
+
+Ezért a keresési ansatz:
+\[
+F_1=x+P(x,y),
+\qquad F_2=y+Q(x,y),
+\]
+ahol
+\[
+P,Q\in(x,y)^2.
+\]
+
+A normalizálás megőrzi a polinomialitást, a fokszámot és a konstans Jacobian-determinánst.
+
+A két ütközési egyenlet:
+\[
+1+P(1,0)=0,
+\qquad Q(1,0)=0.
+\]
+
+A Keller-egyenlet:
+\[
+P_x+Q_y+P_xQ_y-P_yQ_x=0.
+\]
+
+## 2. Általános egzakt keresési algoritmus
+
+Rögzített fokszámra minden lehetséges monom monom együtthatóját ismeretlenként kell felvenni.
+
+1. Felépíteni az általános \(P,Q\) polinomokat.
+2. Kifejteni \(\det JF-1\)-et.
+3. Az összes \(x^iy^j\)-együtthatót nullaegyenletté tenni.
+4. Hozzáadni a két normalizált ütközési egyenletet.
+5. A kapott koefficiensideált egzakt \(\mathbb Q\)-alapú Gröbner-számítással vizsgálni.
+6. Ha az ideál \((1)\), akkor nincs komplex megoldás az adott ansatzban.
+7. Ha nem unit ideál, algebrai komponenseket kell kivonni és az eredményül kapott jelöltet közvetlenül ellenőrizni.
+8. Elfogadás csak akkor lehetséges, ha külön igazolva van:
+   \[
+   F_1,F_2\in\mathbb C[x,y],
+   \quad \det JF-1=0,
+   \quad F(P)-F(Q)=0,
+   \quad P\ne Q.
+   \]
+
+## 3. Fokszám-2 eredmény
+
+A kvadratikus ansatz:
+\[
+P=a_{20}x^2+a_{11}xy+a_{02}y^2,
+\]
+\[
+Q=b_{20}x^2+b_{11}xy+b_{02}y^2.
+\]
+
+A Keller-egyenletek többek között:
+\[
+E_x=2a_{20}+b_{11},
+\qquad
+E_y=a_{11}+2b_{02},
+\]
+\[
+E_{x^2}=2a_{20}b_{11}-2a_{11}b_{20},
+\]
+\[
+E_{xy}=4a_{20}b_{02}-4a_{02}b_{20},
+\qquad
+E_{y^2}=2a_{11}b_{02}-2a_{02}b_{11}.
+\]
+
+Az ütközés:
+\[
+C_1=a_{20}+1,
+\qquad C_2=b_{20}.
+\]
+
+Egzakt Nullstellensatz-certifikát:
+\[
+1=C_1-\frac12E_x-\frac14E_{x^2}
++\frac12b_{11}C_1-\frac12a_{11}C_2.
+\]
+
+Következmény: a normalizált kvadratikus ütközési ideál unit ideál, tehát fokszám \(\le2\)-ben nincs ilyen polinomiális ellenpélda.
+
+Erősebb szerkezeti eredmény: minden normalizált kvadratikus Keller-leképezés \(F=\operatorname{id}+H\) esetén egzakt redukcióval
+\[
+H\circ F=H,
+\]
+és ezért
+\[
+F^{-1}=\operatorname{id}-H.
+\]
+Tehát minden ilyen leképezés polinomiális automorfizmus.
+
+## 4. Fokszám-3 eredmény
+
+A teljes ansatz minden fokszám-2 és fokszám-3 monommal:
+\[
+P=a_{20}x^2+a_{11}xy+a_{02}y^2+a_{30}x^3+a_{21}x^2y+a_{12}xy^2+a_{03}y^3,
+\]
+\[
+Q=b_{20}x^2+b_{11}xy+b_{02}y^2+b_{30}x^3+b_{21}x^2y+b_{12}xy^2+b_{03}y^3.
+\]
+
+A rendszer 14 determináns-egyenletből és 2 ütközési egyenletből áll. Hét lineáris egyenlet egzakt eliminációja után 7 szabad változó és 9 maradó polinomiális egyenlet keletkezik.
+
+A maradó ideál Gröbner-bázisa Singular 4.3.2-ben:
+```text
+G[1] = 1
+```
+
+Ezenfelül explicit racionális Nullstellensatz-identitás áll rendelkezésre:
+\[
+\sum_{i=1}^9T_iE_i=1,
+\]
+és ezt SymPy 1.14 pontos aritmetikával függetlenül ellenőrizte.
+
+Következmény:
+
+> Nincs kétváltozós komplex polinomiális Keller-leképezés teljes fokszámmal legfeljebb három, amelynek két különböző véges pontja azonos képű.
+
+Ez szigorú, de csak korlátos fokszámú eredmény.
+
+## 5. Homogén fokszám-4 ansatz
+
+A vizsgált homogén ansatz:
+\[
+P=Ax^4+Bx^3y+Cx^2y^2+Dxy^3+Ey^4,
+\]
+\[
+Q=Ux^4+Vx^3y+Wx^2y^2+Zxy^3+Ty^4.
+\]
+
+Az ütközésből:
+\[
+C_1=A+1=0,
+\qquad C_2=U=0.
+\]
+
+A determinánsból kivett két egyenlet:
+\[
+L=4A+V=0,
+\qquad H=4AV-4BU=0.
+\]
+
+A teljes ideál már ezen négy egyenletből kizárható, mert
+\[
+1=-\frac1{16}H+\frac14AL-\frac14BC_2-(A-1)C_1.
+\]
+
+Ez csak a homogén quartikus vezető ansatz kizárása. Nem zárja ki a teljes, nemhomogén fokszám-4 esetet.
+
+## 6. Teljes fokszám-3 audit és Laurent/Puiseux ág
+
+A Laurent/Puiseux-kód csak jelöltgenerátor:
+\[
+x(t)=\sum_{k=\ell}^{h}u_kt^k,
+\qquad
+ y(t)=\sum_{k=\ell}^{h}v_kt^k.
+\]
+
+Feltétel, hogy \(F_1(x(t),y(t))\) és \(F_2(x(t),y(t))\) pozitív \(t\)-hatványai eltűnjenek. A három vezető eset:
+
+- `x_only`;
+- `y_only`;
+- `mixed`.
+
+Ez nem teljes bizonyítás: véges Laurent-ablak nem merít ki minden Puiseux-ágat, és egy végtelenbeli traktus önmagában nem jelent két véges ponttal való ütközést.
+
+A fokszám-2 osztályban azonban az egzakt polinomiális inverz miatt minden ilyen traktus kizárható: a polinomiális inverz alkalmazása visszaviszi a véges határértékű sorozatot olyan sorozatba, amelyben nincs pozitív hatvány.
+
+## 7. A fájlban szereplő hiperbolikus racionális jelölt
+
+A projektben szerepelt:
+\[
+P=x^2y+x=x(xy+1),
+\qquad
+Q=\frac{y}{xy+1}.
+\]
+
+Egzaktul:
+\[
+\det J(P,Q)=1,
+\]
+de \(Q\) nem polinom, mert pólusa van az \(xy+1=0\) hiperbolán. Ezért nem 2D polinomiális ellenpélda.
+
+Az inverz képlete:
+\[
+x=\frac{X}{XY+1},
+\qquad
+y=Y(XY+1),
+\]
+és a nevező éppen azt mutatja, hogy a konstrukció racionális marad.
+
+## 8. A torikus racionális jelölt és kizárása
+
+A torikus mag:
+\[
+F_0(x,y)=\left(x+\frac{y^2}{2x^2},
+ y+\frac{y^3}{3x^3}\right).
+\]
+
+A toruszon \(x\ne0\):
+\[
+\det JF_0=1,
+\]
+és van hárompontú rostja. De a leképezés nem tartozik \(\mathbb C[x,y]^2\)-hez.
+
+Ha polinomiális forráslencsével \((x,y)=(\phi,\psi)\) akarjuk kioltani a pólusokat, akkor az UFD-oszthatóság miatt:
+\[
+\phi^2\mid\psi^2
+\quad\Longrightarrow\quad
+\psi=\phi K.
+\]
+
+Ekkor a regularizált leképezés:
+\[
+\left(\phi+\frac{K^2}{2},
+\phi K+\frac{K^3}{3}\right).
+\]
+
+A Jacobian láncszabállyal:
+\[
+\det J=
+\phi(\phi_sK_t-\phi_tK_s).
+\]
+
+Ez nem lehet azonosan 1: ha a szorzat 1, akkor \(\phi\) konstans egység, de ekkor a második tényező nulla.
+
+Következmény: ez az egész torikus nevezőkioltási ansatz lehetetlen.
+
+## 9. Hamilton/Poisson ansatz és kizárása
+
+A vizsgált egy-lépéses konstrukció:
+\[
+F_H=(x+H_y,y-H_x).
+\]
+
+A Jacobian:
+\[
+\det JF_H=1+\det\operatorname{Hess}(H).
+\]
+
+A Keller-feltétel tehát:
+\[
+H_{xx}H_{yy}-H_{xy}^2=0.
+\]
+
+A bináris polinomiális nulla-Hessianus lemma szerint:
+\[
+H(x,y)=\Phi(\alpha x+\beta y)+ax+by+c.
+\]
+
+Megfelelő lineáris koordinátákban ez háromszög alakú leképezés, explicit polinomiális inverzzel. Ezért ez az ansatz nem adhat ütközést, tetszőleges fokszám mellett sem.
+
+## 10. Teljes nemhomogén fokszám-4 keresés
+
+A még nyitva maradt konkrét számítás:
+\[
+P,Q\in(x,y)^2,
+\qquad
+\deg P,\deg Q\le4,
+\]
+minden kvadratikus, köbös és quartikus monommal együtt.
+
+Ebben 24 koefficiensváltozó és 29 egyenlet van. A SymPy Gröbner-futtatás túl lassú volt, ezért Singularra lett átfordítva.
+
+Létrehozott fájlok:
+
+- `/home/ubuntu/full_deg4.sing` — a teljes Singular-bemenet;
+- `/home/ubuntu/generate_deg4_singular.py` — a bemenet generátora;
+- `/home/ubuntu/full_deg4_singular.log` — a futási napló.
+
+A Singular-futtatás a wrapper-job kapcsolatának elvesztésekor még aktív számításban volt, nagyjából 1 GB memóriával; végső `UNIT_IDEAL` vagy `NONUNIT` eredmény a naplóban nem jelent meg. A jelenlegi állapotellenőrzéskor már nem volt élő `Singular` processz, így a teljes fokszám-4 számítás eredménye nincs hitelesen lezárva.
+
+## 11. A helyes elfogadási szabály
+
+Egy jövőbeli jelöltet csak akkor szabad ellenpéldának nevezni, ha a következő négy ellenőrzés mind egzaktul nulla:
+
+\[
+F_1,F_2\in\mathbb C[x,y],
+\]
+\[
+\det JF-1=0,
+\]
+\[
+F_1(P)-F_1(Q)=0,
+\qquad
+F_2(P)-F_2(Q)=0,
+\]
+\[
+(P_x-Q_x,P_y-Q_y)\ne(0,0).
+\]
+
+A nemunit ideál vagy egy Laurent/Puiseux traktus önmagában csak jelöltet jelent; nem jelent 2D-s Jacobian-ellenpéldát.
+
+## 12. Rövid státusz
+
+A korábbi munka alapján:
+
+- fokszám \(\le3\): egzaktul kizárva;
+- homogén quartikus ansatz: egzaktul kizárva;
+- kvadratikus Laurent/Puiseux ág: egzaktul kizárva;
+- torikus racionális nevezőkioltás: szerkezetileg kizárva;
+- egy-lépéses Hamilton/Poisson ansatz: szerkezetileg kizárva;
+- teljes nemhomogén fokszám-4 ideál: a számítás elindult, de hiteles végső eredmény nélkül megszakadt;
+- valódi 2D polinomiális ellenpélda: nincs.
+
+A korábbi üzenetek és a jelenleg elérhető fájlok alapján a 2D-s program valójában **négy külön szintből** állt. Ezeket szét kell választani, mert a korábbi jegyzet több helyen összekeverte a racionális, a polinomiális és a 3D-s konstrukciót.
+
+# 1. A cél pontos matematikai formája
+
+A klasszikus 2D-s Jacobian-sejtés megcáfolásához olyan
+
+\[
+F=(F_1,F_2)\in\mathbb C[x,y]^2
+\]
+
+leképezés kell, amelyre
+
+\[
+\det JF
+=
+\frac{\partial F_1}{\partial x}
+\frac{\partial F_2}{\partial y}
+-
+\frac{\partial F_1}{\partial y}
+\frac{\partial F_2}{\partial x}
+\equiv 1,
+\]
+
+és amely nem injektív, vagyis léteznek \(P\neq Q\) pontok úgy, hogy
+
+\[
+F(P)=F(Q).
+\]
+
+A végső tanúsítványnak tehát ezt kell tartalmaznia:
+
+\[
+F_1,F_2\in\mathbb C[x,y],
+\qquad
+\det JF\equiv1,
+\qquad
+P\neq Q,
+\qquad
+F(P)=F(Q).
+\]
+
+Racionális függvény, Laurent-függvény, kizárt divisoron értelmezett leképezés vagy 3D-s polinomiális leképezés **nem elegendő**.
+
+---
+
+# 2. Az első, rigorózus módszer: normalizált véges ütközési ideál
+
+A `pasted_content.txt` fájlban szereplő módszer a tiszta 2D-s polinomiális keresés pontos algebrai backendje.
+
+## 2.1. Ütközés normalizálása
+
+Egy véges ütközést algebrai koordinátatranszformációval a következő formára próbálunk hozni:
+
+\[
+F(0,0)=F(1,0)=(0,0),
+\]
+
+és szükség esetén
+
+\[
+JF(0,0)=I.
+\]
+
+A keresett leképezést így írjuk:
+
+\[
+F_1=x+P(x,y),\qquad
+F_2=y+Q(x,y),
+\]
+
+ahol \(P,Q\) csak legalább másodfokú tagokat tartalmaznak.
+
+## 2.2. Általános fokszám-\(d\) ansatz
+
+\[
+P(x,y)=
+\sum_{2\le i+j\le d}
+a_{ij}x^iy^j,
+\]
+
+\[
+Q(x,y)=
+\sum_{2\le i+j\le d}
+b_{ij}x^iy^j.
+\]
+
+A Keller-feltétel:
+
+\[
+\det JF-1=0.
+\]
+
+Mivel
+
+\[
+F_1=x+P,\qquad F_2=y+Q,
+\]
+
+ez ekvivalens:
+
+\[
+P_x+Q_y+P_xQ_y-P_yQ_x=0.
+\]
+
+A polinom minden monomjának együtthatóját nullává kell tenni. Ezek adják a Jacobian-egyenleteket.
+
+Az ütközés normalizált feltételei:
+
+\[
+F_1(1,0)=0,\qquad F_2(1,0)=0.
+\]
+
+Mivel \(F(0,0)=(0,0)\) automatikusan teljesül, ezek:
+
+\[
+1+P(1,0)=0,
+\qquad
+Q(1,0)=0.
+\]
+
+## 2.3. Gröbner-feldolgozás
+
+Az összes egyenletből ideált képezünk:
+
+\[
+I_d=
+\langle
+\text{Jacobian-egyenletek},
+F_1(1,0),
+F_2(1,0)
+\rangle.
+\]
+
+Ezután lexikografikus vagy degrevlex Gröbner-bázist számítunk.
+
+- Ha
+  \[
+  I_d=(1),
+  \]
+  akkor az adott fokszámkorláton belül nincs megoldás.
+- Ha
+  \[
+  I_d\neq(1),
+  \]
+  akkor egy komponens vagy algebrai megoldás kivonható, de ez még csak jelölt.
+- A jelöltet utána közvetlenül kell ellenőrizni.
+
+## 2.4. A fokszám-2 pontos eredménye
+
+A kvadratikus ansatz:
+
+\[
+P=a_{20}x^2+a_{11}xy+a_{02}y^2,
+\]
+
+\[
+Q=b_{20}x^2+b_{11}xy+b_{02}y^2.
+\]
+
+A Jacobian-egyenletek:
+
+\[
+E_x=2a_{20}+b_{11},
+\]
+
+\[
+E_y=a_{11}+2b_{02},
+\]
+
+\[
+E_{x^2}=2a_{20}b_{11}-2a_{11}b_{20},
+\]
+
+\[
+E_{xy}=4a_{20}b_{02}-4a_{02}b_{20},
+\]
+
+\[
+E_{y^2}=2a_{11}b_{02}-2a_{02}b_{11}.
+\]
+
+Az ütközési feltételek:
+
+\[
+C_1=a_{20}+1,
+\qquad
+C_2=b_{20}.
+\]
+
+A fájlban szereplő egzakt Nullstellensatz-tanúsítvány:
+
+\[
+1=
+C_1-\frac12E_x-\frac14E_{x^2}
++\frac12b_{11}C_1-\frac12a_{11}C_2.
+\]
+
+Ezért
+
+\[
+I_2=(1).
+\]
+
+Vagyis a **normalizált kvadratikus tiszta polinomiális ansatz lehetetlen**.
+
+A SymPy-kimenet:
+
+```text
+Expanded Nullstellensatz certificate:
+1
+
+Groebner basis:
+GroebnerBasis([1], ...)
+```
+
+---
+
+# 3. A magasabb fokú tiszta polinomiális keresés
+
+A `pasted_content.txt` fájlban szereplő Sage-motor ezt ismétli meg fokszámról fokszámra.
+
+## Lépések
+
+1. Válasszunk egy fokszámot \(d\).
+2. Generáljuk az összes monomot \(x^iy^j\), ahol
+   \[
+   2\le i+j\le d.
+   \]
+3. Vezessünk be minden monomhoz \(a_{ij}\) és \(b_{ij}\) együtthatót.
+4. Építsük fel \(F_1,F_2\)-t.
+5. Fejtsük ki \(\det JF-1\)-et.
+6. Együtthatónként nullázzuk.
+7. Adjuk hozzá az ütközési feltételeket.
+8. Számítsunk Gröbner-bázist.
+9. Vizsgáljuk, hogy a bázis tartalmazza-e az \(1\)-et.
+10. Nem-unit ideál esetén algebrai komponensből jelöltet kell kivonni.
+11. A jelöltet külön SymPy/Sage-verifikátorral kell ellenőrizni.
+
+A végső ellenőrző függvénynek pontosan ezt kell kiírnia:
+
+```python
+detJF_minus_1 = 0
+F1(P)-F1(Q)   = 0
+F2(P)-F2(Q)   = 0
+P != Q
+```
+
+---
+
+# 4. A második út: Laurent/Puiseux-aszimptotikus tract keresés
+
+A közvetlen véges ütközési keresés helyett a fájl egy nemproper viselkedést célzó ansatzot is tartalmaz.
+
+## 4.1. Laurent-paraméterezés
+
+Írjuk:
+
+\[
+x(t)=\sum_{k=\ell}^{h}u_k t^k,
+\qquad
+y(t)=\sum_{k=\ell}^{h}v_k t^k,
+\]
+
+ahol \(h>0\), tehát \(t\to\infty\) mellett legalább az egyik koordináta elszállhat.
+
+A keresés célja:
+
+\[
+F_1(x(t),y(t)),
+\qquad
+F_2(x(t),y(t))
+\]
+
+ne tartalmazzon pozitív \(t\)-hatványokat, vagyis legyen véges határértékük.
+
+## 4.2. Algebrai rendszer
+
+A következő ismeretlenek szerepelnek:
+
+- a \(F_1,F_2\) együtthatói;
+- a Laurent-sor \(u_k,v_k\) együtthatói.
+
+Feltételek:
+
+1. \(\det JF-1=0\);
+2. a behelyettesített \(F_1(x(t),y(t))\) minden pozitív \(t\)-hatványának együtthatója nulla;
+3. ugyanez \(F_2\)-re;
+4. vezető együttható normalizálása:
+   - `x_only`: \(u_h=1,v_h=0\);
+   - `y_only`: \(u_h=0,v_h=1\);
+   - `mixed`: \(u_h=1\).
+
+Ezután ismét Gröbner-bázist számítunk.
+
+Ez a módszer **jelölteket generál**, de minden jelöltet vissza kell alakítani tényleges \(F_1,F_2\) polinomokká, majd az előző pontos verifikátorral ellenőrizni.
+
+---
+
+# 5. A 2:3-as hiperbolikus rezonátor-ansatz
+
+A `pasted_content_2.txt` és a projektjegyzet 27300 körüli része egy másik ötletet tartalmaz.
+
+## 5.1. Alapansatz
+
+A hiperbolikus mag:
+
+\[
+H(x,y)=xy.
+\]
+
+A két főpolinom:
+
+\[
+f(x,y)=(xy)^2+f_{\mathrm{sub}}(x,y)+x,
+\]
+
+\[
+g(x,y)=(xy)^3+g_{\mathrm{sub}}(x,y)+y.
+\]
+
+A cél:
+
+\[
+\{f,g\}\equiv1.
+\]
+
+## 5.2. Vezető tag kioltása
+
+Mivel mindkét vezető tag ugyanannak a \(xy\) magnak a hatványa:
+
+\[
+\{(xy)^2,(xy)^3\}=0.
+\]
+
+Ez valóban kioltja a legmagasabb fokú Poisson-tagot.
+
+## 5.3. Lie-operátor
+
+A használt operátor:
+
+\[
+L=x\frac{\partial}{\partial x}
+-y\frac{\partial}{\partial y}.
+\]
+
+A Poisson-zárójel:
+
+\[
+\{xy,A\}
+=
+yA_y-xA_x
+=
+-L(A).
+\]
+
+A kereszttagok ezért egyetlen rezonanciafeltételbe szervezhetők.
+
+## 5.4. Rezonanciafeltétel
+
+A javasolt választás:
+
+\[
+g_{\mathrm{sub}}
+=
+\frac32xy\,f_{\mathrm{sub}}
++
+g_{\mathrm{rem}}.
+\]
+
+Ekkor a számítás szerint:
+
+\[
+\{f,g\}
+=
+L\left(
+\frac34 f_{\mathrm{sub}}^2
+-2xy\,g_{\mathrm{rem}}
+\right)
++
+\{f_{\mathrm{sub}},g_{\mathrm{rem}}\}.
+\]
+
+Az első tag kioltásához választjuk:
+
+\[
+g_{\mathrm{rem}}
+=
+\frac{3f_{\mathrm{sub}}^2}{8xy}.
+\]
+
+A nevezőmentesítés feltétele:
+
+\[
+f_{\mathrm{sub}}=xy\,\Omega(x,y).
+\]
+
+Ekkor:
+
+\[
+g_{\mathrm{rem}}
+=
+\frac38xy\,\Omega(x,y)^2,
+\]
+
+ami valóban polinom.
+
+## 5.5. A döntő ellenőrzés
+
+A konstans \(\Omega=\Omega_0\) esetén:
+
+\[
+f=(xy)^2+\Omega_0xy+x,
+\]
+
+\[
+g=(xy)^3+
+\frac32\Omega_0(xy)^2+
+\frac38\Omega_0^2xy+y.
+\]
+
+A SymPy-kimenet azonban:
+
+\[
+\{f,g\}
+=
+1+
+3x^3y^2+
+2xy^2+
+3\Omega_0x^2y+
+\Omega_0y+
+\frac38\Omega_0^2x.
+\]
+
+Ez **nem azonosan 1**.
+
+Tehát a 2:3-as rezonancia:
+
+- valóban kioltja a legmagasabb fokú tagokat;
+- valóban polinomiális marad;
+- de nem oldja meg a teljes Keller-egyenletet.
+
+A megmaradó alacsonyabb fokú tagokat egy nemkonstans \(\Omega(x,y)\)-val próbálták tovább kioltani, ezért indult az `OMEGA_DEG 3` keresés.
+
+A korábbi kimenet:
+
+```text
+OMEGA_DEG 3 VARS 10 EQS 64 GB_UNIT True
+```
+
+Ez azt jelenti, hogy a fokszám-3 \(\Omega\)-ansatz ideálja unit ideál volt, tehát ebben a konkrét korlátban nincs megoldás.
+
+A teljes fokszám-4 keresés:
+
+```text
+FULL_DEG4_VARS 24 EQS 29
+```
+
+utána hosszú Gröbner-számításba kezdett, de abból nem érkezett végső megoldás.
+
+---
+
+# 6. A racionális hiperbolikus seed — nem 2D-s polinomiális ellenpélda
+
+A projektjegyzetben szerepel:
+
+\[
+P(x,y)=x^2y+x=x(xy+1),
+\]
+
+\[
+Q(x,y)=\frac{y}{xy+1}.
+\]
+
+A számítás szerint:
+
+\[
+\det J(P,Q)\equiv1
+\]
+
+ott, ahol \(xy+1\neq0\).
+
+Az inverz:
+
+\[
+x=\frac{X}{XY+1},
+\qquad
+y=Y(XY+1).
+\]
+
+Ez megmutatja a nemproper határhalmazt:
+
+\[
+S_F=\{XY+1=0\}.
+\]
+
+De \(Q\) nem polinom, hanem racionális függvény. Ezért ez a konstrukció:
+
+\[
+\boxed{\text{racionális Keller-leképezés, nem klasszikus 2D-s polinomiális ellenpélda}.}
+\]
+
+---
+
+# 7. A 3D-s tangent-developable konstrukció
+
+A projektjegyzet későbbi része egy teljesen másik objektumot tartalmaz:
+
+\[
+F=(F_1,F_2,F_3)\in\mathbb Q[x,y,z]^3,
+\]
+
+ahol
+
+\[
+F_1=
+\frac12x^3y^2z+
+\frac92x^2y^3+
+x^2yz+
+6xy^2+
+\frac12xz+
+\frac12y,
+\]
+
+\[
+F_2=
+\frac13x^3y^3z+
+3x^2y^4+
+x^2y^2z+
+7xy^3+
+xyz+
+4y^2+
+\frac13z,
+\]
+
+\[
+F_3=-x^3z-9x^2y+6x.
+\]
+
+A jegyzet szerint:
+
+\[
+\det JF=1,
+\]
+
+és például:
+
+\[
+F(1,1,15)=F(1,2,24)=F(0,2,48)=(1,0,0).
+\]
+
+Ez azonban **3D-s leképezés**, nem 2D-s. A `reduced_chart.out` is ehhez a 3D-s együttható-/chart-rendszerhez tartozik:
+
+```text
+REDUCED_CHART_GENERATORS
+10
+REDUCED_CHART_GB_SIZE
+2048
+```
+
+A kimenet végén a Singular megszakadt a 2048 elem kiírása közben. Nem szerepel benne tiszta `G[i]=1`, de ez csak a chart-ideál állapotáról mond valamit; nem 2D-s polinomiális ellenpélda.
+
+---
+
+# 8. A tényleges 2D-s munkafolyamat
+
+A korábbi fájlokból rekonstruálható korrekt sorrend:
+
+## I. Ansatzt választani
+
+Elsődlegesen:
+
+\[
+F_1=x+P,\qquad F_2=y+Q,
+\]
+
+rögzített fokszámkorláttal.
+
+Másodlagosan:
+
+- Laurent/Puiseux-tract ansatz;
+- 2:3-as hiperbolikus rezonátor;
+- más, pontosan definiált nemlineáris főtag.
+
+## II. A Keller-egyenletet felépíteni
+
+\[
+\det JF-1=0.
+\]
+
+Minden monom együtthatóját egzakt módon nullázni.
+
+## III. Ütközési feltételt hozzáadni
+
+Normalizált formában:
+
+\[
+F(0,0)=F(1,0).
+\]
+
+Vagy általános pontokkal:
+
+\[
+F(P)=F(Q),
+\qquad
+P\neq Q.
+\]
+
+A különbözőséget algebraikusan például segédváltozóval lehet kódolni:
+
+\[
+1-t_1(p_1-q_1)-t_2(p_2-q_2)=0.
+\]
+
+## IV. Gröbner-bázist számítani
+
+- unit ideál: az adott ansatz és fokkorlát kizárva;
+- nem-unit ideál: komponens/megoldás kivonandó;
+- nagy bázis önmagában nem ellenpélda.
+
+## V. Jelöltet kivonni
+
+A Gröbner-bázisból:
+
+- eliminációs polinom;
+- algebrai gyök;
+- együttható-specializáció;
+- explicit \(F_1,F_2\).
+
+## VI. Független egzakt ellenőrzés
+
+Kötelezően:
+
+\[
+F_1,F_2\in\mathbb C[x,y],
+\]
+
+\[
+\det JF-1=0,
+\]
+
+\[
+F_1(P)-F_1(Q)=0,
+\]
+
+\[
+F_2(P)-F_2(Q)=0,
+\]
+
+\[
+P\neq Q.
+\]
+
+Csak akkor lenne megcáfolt a 2D-s sejtés, ha mind az öt feltétel egyszerre teljesülne.
+
+---
+
+# 9. Mi tekinthető jelenleg tényleges eredménynek?
+
+A fájlok alapján jelenleg ezek vannak egzaktul igazolva:
+
+1. A normalizált kvadratikus tiszta 2D-s ansatz lehetetlen:
+   \[
+   I_2=(1).
+   \]
+
+2. A 2:3-as rezonancia kioltja a vezető tagokat, de a konstans \(\Omega\)-változat nem Keller-leképezés.
+
+3. A fokszám-3 \(\Omega\)-keresés unit ideált adott.
+
+4. A
+   \[
+   \left(x^2y+x,\frac{y}{xy+1}\right)
+   \]
+   racionális leképezés Jacobian-determinánsa \(1\), de nem polinomiális.
+
+5. A tangent-developable konstrukció egy 3D-s polinomiális leképezés, nem a kért 2D-s objektum.
+
+A jelenlegi 2D-s módszer tehát nem egy már elkészült ellenpélda, hanem:
+
+\[
+\boxed{
+\text{ansatz}
+\rightarrow
+\text{együtthatóegyenletek}
+\rightarrow
+\text{Gröbner-elimináció}
+\rightarrow
+\text{jelöltkivonás}
+\rightarrow
+\text{független exakt verifikáció}.
+}
+\]
+
+A legfontosabb korrekció: a korábbi 3D-s `reduced_chart.out` nem a tiszta 2D-s keresés végső bizonyítéka, a 2:3-as rezonátor pedig a mostani kimenet alapján csak részleges magasfokú kioltást adott, nem \(\det JF\equiv1\)-et.

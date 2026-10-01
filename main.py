@@ -179,6 +179,7 @@ class RequestHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache, no-transform")
         self.send_header("Connection", "keep-alive")
         self.send_header("X-Accel-Buffering", "no")
+        self.send_header("X-Chat-Job-Id", job_id)
         self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         agent.launch_job(job_id)

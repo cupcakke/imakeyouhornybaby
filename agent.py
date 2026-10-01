@@ -139,7 +139,7 @@ def _make_client(session_id=None):
     api_key = os.environ.get("INSTAVM_API_KEY")
     if not api_key:
         raise RuntimeError("INSTAVM_API_KEY is not configured")
-    client = InstaVM(api_key=api_key, auto_start_session=False, timeout=3600, max_retries=2)
+    client = InstaVM(api_key=api_key, auto_start_session=False, timeout=3600, max_retries=0)
     if session_id:
         client.session_id = session_id
     return client
@@ -156,7 +156,10 @@ def _ensure_sandbox(conversation_id, vm_id, session_id, job_id):
             if vm_status in ("terminated", "deleted", "failed", "expired", "stopped"):
                 vm_id = None
                 session_id = None
-        except Exception:
+        except Exception as error:
+            status_code = getattr(getattr(error, "response", None), "status_code", None)
+            if status_code not in (404, 410):
+                raise
             vm_id = None
             session_id = None
         if vm_id and session_id:
@@ -165,7 +168,7 @@ def _ensure_sandbox(conversation_id, vm_id, session_id, job_id):
     client = _make_client()
     created = client.vms.create(
         wait=True,
-        vm_lifetime_seconds=86400,
+        vm_lifetime_seconds=3600,
         auto_suspend=True,
         auto_resume=True,
     )
@@ -451,15 +454,104 @@ def _consume_stream(job, client, sandbox, vm_id, agent_messages, model):
     return "".join(text), "".join(reasoning), [tool_calls[index] for index in sorted(tool_calls)], finish_reason, was_redirected
 
 
+def _repair_dangling_tool_calls(job_id, agent_messages):
+    changed = False
+    repaired_events = []
+    index = 0
+    while index < len(agent_messages):
+        message = agent_messages[index]
+        tool_calls = message.get("tool_calls") if message.get("role") == "assistant" else None
+        if not isinstance(tool_calls, list) or not tool_calls:
+            index += 1
+            continue
+        expected_ids = {
+            call.get("id")
+            for call in tool_calls
+            if isinstance(call, dict) and call.get("id")
+        }
+        cursor = index + 1
+        completed_ids = set()
+        while cursor < len(agent_messages) and agent_messages[cursor].get("role") == "tool":
+            call_id = agent_messages[cursor].get("tool_call_id")
+            if call_id in expected_ids:
+                completed_ids.add(call_id)
+            cursor += 1
+        missing_calls = [
+            call
+            for call in tool_calls
+            if isinstance(call, dict) and call.get("id") and call.get("id") not in completed_ids
+        ]
+        for call in missing_calls:
+            name = (call.get("function") or {}).get("name", "tool")
+            agent_messages.insert(
+                cursor,
+                {
+                    "role": "tool",
+                    "tool_call_id": call["id"],
+                    "content": json.dumps(
+                        {
+                            "ok": False,
+                            "error": (
+                                "The server restarted before this tool result was saved. "
+                                "The tool was not rerun because it may already have completed."
+                            ),
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            )
+            repaired_events.append((name, call["id"]))
+            cursor += 1
+            changed = True
+        index = cursor
+    if changed:
+        storage.save_agent_messages(job_id, agent_messages)
+        for name, _ in repaired_events:
+            _event(
+                job_id,
+                {"type": "agent_event", "event": {"type": "tool_result", "tool": name, "ok": False}},
+            )
+    return changed
+
+
 def _handle_tool_calls(job, client, sandbox, vm_id, agent_messages, assistant_text, reasoning, tool_calls):
     assistant_message = {"role": "assistant", "content": assistant_text or None, "tool_calls": tool_calls}
     agent_messages.append(assistant_message)
     if reasoning:
         assistant_message["reasoning_content"] = reasoning
     storage.save_agent_messages(job["job_id"], agent_messages)
-    for tool_call in tool_calls:
+    for index, tool_call in enumerate(tool_calls):
         if storage.is_cancel_requested(job["job_id"]):
             raise JobCancelled()
+        if storage.has_redirects(job["job_id"]):
+            skipped_calls = tool_calls[index:]
+            for skipped_call in skipped_calls:
+                agent_messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": skipped_call["id"],
+                        "content": json.dumps(
+                            {
+                                "ok": False,
+                                "error": "The user redirected the task before this tool ran; it was skipped.",
+                            },
+                            ensure_ascii=False,
+                        ),
+                    }
+                )
+                _event(
+                    job["job_id"],
+                    {
+                        "type": "agent_event",
+                        "event": {
+                            "type": "tool_result",
+                            "tool": (skipped_call.get("function") or {}).get("name", "tool"),
+                            "ok": False,
+                        },
+                    },
+                )
+            storage.save_agent_messages(job["job_id"], agent_messages)
+            return
         name = tool_call["function"]["name"]
         call_id = tool_call["id"]
         _event(
@@ -497,6 +589,8 @@ def _run_job(job_id):
         job = storage.get_job_and_conversation(job_id)
         if not job or job["status"] != "running":
             return
+        if storage.is_cancel_requested(job_id):
+            raise JobCancelled()
         agent_messages = job["agent_messages"] or []
         if not agent_messages:
             agent_messages = [{"role": "system", "content": SYSTEM_MESSAGE}]
@@ -505,7 +599,8 @@ def _run_job(job_id):
                 for item in (job["conversation_messages"] or [])
                 if isinstance(item, dict) and item.get("role") in ("user", "assistant")
             )
-        if job["response_content"]:
+        recovered_tool_calls = _repair_dangling_tool_calls(job_id, agent_messages)
+        if job["response_content"] and not recovered_tool_calls:
             if not agent_messages or agent_messages[-1].get("role") != "assistant":
                 agent_messages.append({"role": "assistant", "content": job["response_content"]})
                 agent_messages.append(
@@ -519,6 +614,8 @@ def _run_job(job_id):
         sandbox, vm_id, session_id = _ensure_sandbox(
             job["conversation_id"], job["vm_id"], job["vm_session_id"], job_id
         )
+        if storage.is_cancel_requested(job_id):
+            raise JobCancelled()
         model_client = _new_model_client()
         last_model = None
         while True:
@@ -539,7 +636,7 @@ def _run_job(job_id):
             text, reasoning, tool_calls, finish_reason, redirected = _consume_stream(
                 job, model_client, sandbox, vm_id, agent_messages, model
             )
-            if redirected:
+            if redirected or storage.has_redirects(job_id):
                 if text or reasoning:
                     interrupted_message = {"role": "assistant", "content": text or None}
                     if reasoning:

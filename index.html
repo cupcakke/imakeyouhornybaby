@@ -6186,9 +6186,9 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
     </div>
   </div>
 </div>
-<input type="file" id="fg" style="display:none" multiple accept="image/*">
-<input type="file" id="fg-files" style="display:none" multiple accept="image/*,.heic,.heif,.avif">
-<input type="file" id="fg-camera" style="display:none" accept="image/*" capture="environment">
+<input type="file" id="fg" style="display:none" multiple accept="image/png,image/jpeg,image/webp,image/gif">
+<input type="file" id="fg-files" style="display:none" multiple accept="image/png,image/jpeg,image/webp,image/gif">
+<input type="file" id="fg-camera" style="display:none" accept="image/png,image/jpeg,image/webp,image/gif" capture="environment">
 <div class="clipboard-preview-modal" id="clipboard-preview-modal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="clipboard-preview-title">
   <div class="clipboard-preview-backdrop" id="clipboard-preview-backdrop"></div>
   <section class="clipboard-preview-card" role="document">
@@ -6263,11 +6263,13 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
   var IMAGE_STORAGE_DATABASE = "chat_image_assets_v2";
   var IMAGE_STORAGE_STORE = "assets";
   var MAX_IMAGE_ATTACHMENT_COUNT = 8;
-  var MAX_IMAGE_ATTACHMENT_BYTES = 15 * 1024 * 1024;
+  var MAX_IMAGE_ATTACHMENT_BYTES = 12 * 1000 * 1000;
+  var SUPPORTED_IMAGE_MIME_TYPES = {"image/png":true, "image/jpeg":true, "image/webp":true, "image/gif":true};
   var messages = [];
   var busy = false;
   var abortController = null;
   var activeChatJobId = null;
+  var pendingChatStopRequested = false;
   var currentId = null;
    var conversationId = null;
   var history = [];
@@ -7002,8 +7004,8 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
   }
 
   function createDescriptorFromFile(file){
-    if(!file || !file.type || file.type.indexOf("image/") !== 0) return Promise.reject(new Error("Csak képfájl csatolható."));
-    if(file.size > MAX_IMAGE_ATTACHMENT_BYTES) return Promise.reject(new Error("Egy kép legfeljebb 15 MB lehet."));
+    if(!file || !SUPPORTED_IMAGE_MIME_TYPES[String(file.type || "").toLowerCase()]) return Promise.reject(new Error("Csak PNG, JPEG, WebP vagy GIF képfájl csatolható."));
+    if(file.size > MAX_IMAGE_ATTACHMENT_BYTES) return Promise.reject(new Error("Egy kép legfeljebb 12 MB lehet."));
     return readBlobAsDataUrl(file).then(function(dataUrl){
       return persistImageDescriptor(createImageDescriptor(dataUrl, {
         name:file.name || "Csatolt kép",
@@ -7541,6 +7543,16 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
   function messageContentForModel(content){
     if(!Array.isArray(content)) return content;
     return content.map(function(part){
+      if(part && (part.type === "image_url" || part.type === "input_image" || part.image_url)){
+        var image = part.image_url || part;
+        var imageUrl = typeof image === "string" ? image : (image.url || image.image_url || part.url || "");
+        if(imageUrl){
+          var imagePart = {type:"image_url", image_url:{url:imageUrl}};
+          var detail = typeof image === "object" && image ? image.detail : part.detail;
+          if(detail) imagePart.image_url.detail = detail;
+          return imagePart;
+        }
+      }
       if(part && part.type === "text_file"){
         return {type:"text", text:"Attached text file: " + String(part.name || "clipboard.txt") + "\n\n" + String(part.text || "")};
       }
@@ -8154,7 +8166,12 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
     }
     if(busy){
       var redirectText = textarea.value.trim();
-      if((redirectText || selectedImages.length || selectedTextFiles.length) && activeChatJobId){
+      var hasRedirectInput = !!(redirectText || selectedImages.length || selectedTextFiles.length);
+      if(hasRedirectInput && !activeChatJobId){
+        toast("A Work-feladat még kapcsolódik. Küldd el újra az irányt egy pillanat múlva.", "inf");
+        return;
+      }
+      if(hasRedirectInput && activeChatJobId){
         try{
           var redirectContent = addImageParts(redirectText || "A folytatáshoz vedd figyelembe a csatolt fájlokat.");
           var redirectResponse = await fetch("/api/chat/jobs/" + encodeURIComponent(activeChatJobId) + "/redirect", {
@@ -8182,6 +8199,10 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
         }
         return;
       }
+      if(!activeChatJobId){
+        pendingChatStopRequested = true;
+        return;
+      }
       await stopActiveBackendJob();
       if(abortController) abortController.abort();
       return;
@@ -8203,6 +8224,7 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
     scheduleStreamRender(streamingMessage);
     setBusy(true);
     startThinkingClock(streamingMessage);
+    pendingChatStopRequested = false;
     abortController = new AbortController();
     var requestConversationId = conversationId || currentId;
     var requestBranchId = activeBranchId;
@@ -8221,6 +8243,14 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
         signal: abortController.signal,
         credentials:"same-origin"
       });
+      var responseJobId = response.headers.get("X-Chat-Job-Id");
+      if(responseJobId && requestToken === abortController){
+        activeChatJobId = responseJobId;
+        if(pendingChatStopRequested){
+          pendingChatStopRequested = false;
+          await stopActiveBackendJob();
+        }
+      }
       if(!response.ok){
         var errorResult = await response.json().catch(function(){ return {}; });
         throw new Error(errorResult.error && errorResult.error.message ? errorResult.error.message : "A modell nem válaszolt.");
@@ -8410,6 +8440,7 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
         stopThinkingClock();
         abortController = null;
         activeChatJobId = null;
+        pendingChatStopRequested = false;
         setBusy(false);
       }
     }
@@ -8441,8 +8472,8 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
   function addSelectedImageFiles(files){
     var inputFiles = Array.prototype.slice.call(files || []);
     if(!inputFiles.length) return Promise.resolve();
-    var imageFiles = inputFiles.filter(function(file){ return file && file.type && file.type.indexOf("image/") === 0; });
-    if(inputFiles.length > imageFiles.length) toast("Nem képfájlok kihagyva", "inf");
+    var imageFiles = inputFiles.filter(function(file){ return file && SUPPORTED_IMAGE_MIME_TYPES[String(file.type || "").toLowerCase()]; });
+    if(inputFiles.length > imageFiles.length) toast("Csak PNG, JPEG, WebP vagy GIF képfájl csatolható.", "inf");
     var remaining = Math.max(0, MAX_IMAGE_ATTACHMENT_COUNT - selectedImages.length);
     if(!remaining){ toast("Legfeljebb " + MAX_IMAGE_ATTACHMENT_COUNT + " kép csatolható.", "err"); return Promise.resolve(); }
     if(imageFiles.length > remaining){

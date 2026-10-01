@@ -152,8 +152,18 @@ def _ensure_sandbox(conversation_id, vm_id, session_id, job_id):
             record = client.vms.get(vm_id)
             if isinstance(record.get("vm"), dict):
                 record = record["vm"]
-            vm_status = str(record.get("status") or record.get("state") or "").lower()
-            if vm_status in ("terminated", "deleted", "failed", "expired", "stopped"):
+            vm_status = str(record.get("status") or record.get("state") or "")
+            vm_status = vm_status.strip().lower().replace("-", "_").replace(" ", "_")
+            if vm_status in (
+                "terminated",
+                "deleted",
+                "failed",
+                "expired",
+                "stopped",
+                "killed",
+                "unavailable",
+                "not_available",
+            ):
                 vm_id = None
                 session_id = None
         except Exception as error:

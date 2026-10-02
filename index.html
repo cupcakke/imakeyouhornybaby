@@ -6575,7 +6575,7 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
   }
 
   function timelineHtml(message){
-    var steps = Array.isArray(message.timeline) ? message.timeline.slice(-8) : [];
+    var steps = Array.isArray(message.timeline) ? message.timeline.slice(-12) : [];
     if(message.isStreaming && !steps.length) steps.push({type:"thought", text:""});
     if(!steps.length) return "";
     return '<div class="cot-timeline">' + steps.map(function(step){
@@ -6587,7 +6587,7 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
   function addTimeline(message, type, text){
     if(!message.timeline) message.timeline = [];
     var last = message.timeline[message.timeline.length - 1];
-    if(type === "thought" && last && last.type === "thought" && last.text.length < 240 && String(text).indexOf("\n") === -1){
+    if(type === "thought" && last && !last.checklistId && last.type === "thought" && last.text.length < 240 && String(text).indexOf("\n") === -1){
       last.text += text;
       return;
     }
@@ -6596,13 +6596,50 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
     if(message.timeline.length > 16) message.timeline.shift();
   }
 
+  function updateChecklistTimeline(message, steps){
+    if(!Array.isArray(steps)) return;
+    if(!message.timeline) message.timeline = [];
+    var ids = {};
+    steps.forEach(function(step){
+      if(!step || !step.id) return;
+      var id = String(step.id);
+      ids[id] = true;
+      var status = String(step.status || "pending");
+      var labels = {
+        pending:"Tervezve: ",
+        in_progress:"Folyamatban: ",
+        completed:"Kész: ",
+        blocked:"Akadály: "
+      };
+      var type = status === "completed" ? "done" : (status === "blocked" ? "thought" : "thought");
+      var text = (labels[status] || "Lépés: ") + String(step.title || id);
+      var existing = message.timeline.find(function(item){ return item.checklistId === id; });
+      if(existing){
+        existing.type = type;
+        existing.text = text;
+      }else{
+        message.timeline.push({type:type, text:text, checklistId:id});
+      }
+    });
+    message.timeline = message.timeline.filter(function(item){ return !item.checklistId || ids[item.checklistId]; }).slice(-16);
+  }
+
   function toolDisplayName(name){
     var labels = {
       sandbox_execute:"shell-parancs",
       sandbox_read_file:"fájlolvasás",
       sandbox_write_file:"fájlírás",
       publish_file:"fájl közzététele",
-      publish_site:"webhely közzététele"
+      publish_site:"webhely közzététele",
+      update_checklist:"ellenőrzőlista frissítése",
+      browser_navigate:"böngésző: oldal megnyitása",
+      browser_inspect:"böngésző: oldal vizsgálata",
+      browser_click:"böngésző: kattintás",
+      browser_fill:"böngésző: mező kitöltése",
+      browser_type:"böngésző: szöveg beírása",
+      browser_scroll:"böngésző: görgetés",
+      browser_wait:"böngésző: várakozás",
+      browser_screenshot:"böngésző: képernyőkép"
     };
     return labels[name] || name || "művelet";
   }
@@ -8317,7 +8354,11 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
               timelineType = "tool";
             }else if(eventType === "tool_result"){
               label = (agentEvent.ok === false ? "Eszközhiba" : "Eszköz kész") + (agentEvent.tool ? ": " + toolDisplayName(agentEvent.tool) : "");
-              timelineType = "tool";
+              timelineType = agentEvent.ok === false ? "thought" : "done";
+            }else if(eventType === "checklist"){
+              updateChecklistTimeline(streamingMessage, agentEvent.steps);
+              scheduleStreamRender(streamingMessage);
+              return;
             }else if(eventType === "model_start"){
               label = "Modell: " + (agentEvent.model || "specialista");
             }else if(eventType === "model_output"){
@@ -8330,8 +8371,10 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
             }else if(eventType === "verification_failed"){
               label = "Ellenőrzés sikertelen, folytatás szükséges";
             }else if(eventType === "progress"){
-              label = "Lépés elkészült: " + (agentEvent.step_id || "");
-              timelineType = "done";
+              var status = agentEvent.status || "in_progress";
+              var stepPrefix = status === "completed" ? "Kész: " : (status === "blocked" ? "Akadály: " : (status === "pending" ? "Tervezve: " : "Folyamatban: "));
+              label = stepPrefix + (agentEvent.step_id || "Work-feladat");
+              timelineType = status === "completed" ? "done" : "thought";
             }else if(eventType === "artifact" && agentEvent.artifact){
               var artifact = agentEvent.artifact;
               label = "Fájl elkészült: " + (artifact.name || artifact.artifact_id || "artifact");
@@ -8341,7 +8384,7 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
                 streamingMessage.content += "\n\n[" + artifactName + "](/api/artifacts/" + encodeURIComponent(artifact.artifact_id) + ")";
               }
             }
-            if(timelineType === "tool") addTimeline(streamingMessage, "tool", label);
+            addTimeline(streamingMessage, timelineType, label);
             scheduleStreamRender(streamingMessage);
             return;
           }
@@ -8601,12 +8644,19 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
       var type = agentEvent.type || "agent_event";
       var label = "Work-feladat";
       var kind = "thought";
+      var checklistUpdated = false;
       if(type === "tool_start"){ label = "Eszköz: " + toolDisplayName(agentEvent.tool); kind = "tool"; }
       else if(type === "tool_result"){ label = (agentEvent.ok === false ? "Eszközhiba: " : "Eszköz kész: ") + toolDisplayName(agentEvent.tool); kind = agentEvent.ok === false ? "thought" : "done"; }
+      else if(type === "checklist"){ updateChecklistTimeline(message, agentEvent.steps); checklistUpdated = true; }
       else if(type === "model_start"){ label = "Modell: " + (agentEvent.model || "specialista"); }
       else if(type === "model_output"){ label = "A modellválasz elkészült"; }
       else if(type === "subagent_done"){ label = "Részfeladat elkészült"; kind = "done"; }
-      else if(type === "progress"){ label = agentEvent.step_id || "Work-feladat folyamatban"; kind = "done"; }
+      else if(type === "progress"){
+        var status = agentEvent.status || "in_progress";
+        var stepPrefix = status === "completed" ? "Kész: " : (status === "blocked" ? "Akadály: " : (status === "pending" ? "Tervezve: " : "Folyamatban: "));
+        label = stepPrefix + (agentEvent.step_id || "Work-feladat");
+        kind = status === "completed" ? "done" : "thought";
+      }
       else if(type === "artifact" && agentEvent.artifact){
         var artifact = agentEvent.artifact;
         label = "Elkészült: " + (artifact.name || "artifact");
@@ -8617,7 +8667,7 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
           if(message.content.indexOf(link) === -1) message.content += "\n\n" + link;
         }
       }
-      addTimeline(message, kind, label);
+      if(!checklistUpdated) addTimeline(message, kind, label);
     }else if(event.type === "delta" || (!event.type && (event.content || event.reasoning_content))){
       if(typeof event.reasoning_content === "string"){
         message.thinking = (message.thinking || "") + event.reasoning_content;

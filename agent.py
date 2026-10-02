@@ -17,7 +17,9 @@ import storage
 
 MODEL = "abliterated-model-large-v2"
 IMAGE_MODEL = "abliterated-model"
-SYSTEM_MESSAGE = """You are a capable work agent. Complete the user's request using the isolated InstaVM sandbox assigned to this conversation. The sandbox has a full shell, can run code, access the internet, and create files. Use the shell and file tools for real work instead of describing hypothetical work. Research current information when needed, inspect provided files, and create finished usable files when requested. Publish requested Sites so they have a working URL. Report meaningful progress as you work, preserve useful intermediate files in the sandbox, and use the artifact tool for every finished document, spreadsheet, presentation, report, or other downloadable file. Do not claim an operation succeeded unless its tool result confirms it. The user may redirect you during a task; follow the latest instruction before starting further work. Reply in the user's language."""
+SYSTEM_MESSAGE = """You are a capable work agent. Complete the user's request using the isolated InstaVM sandbox assigned to this conversation. The sandbox has a full shell, can run code, access the internet, and create files.
+
+At the start of every new request, use sandbox_execute to inspect the sandbox with a harmless command such as `pwd && ls -la`. For any request involving code, files, research, calculations, or creating an artifact, do the actual work with the available tools before answering; do not substitute instructions or a hypothetical description for requested work. Verify important results with shell or file tools. Publish requested Sites so they have a working URL. Preserve useful intermediate files in the sandbox, and use the artifact tool for every finished document, spreadsheet, presentation, report, or other downloadable file. Never claim an operation succeeded unless its tool result confirms it. The user may redirect you during a task; follow the latest instruction before starting further work. Reply in the user's language."""
 
 
 TOOLS = [
@@ -402,7 +404,7 @@ def _model_for_messages(agent_messages):
     return MODEL
 
 
-def _consume_stream(job, client, sandbox, vm_id, agent_messages, model):
+def _consume_stream(job, client, sandbox, vm_id, agent_messages, model, require_shell=False):
     completion = client.chat.completions.create(
         model=model,
         temperature=1,
@@ -412,7 +414,11 @@ def _consume_stream(job, client, sandbox, vm_id, agent_messages, model):
         reasoning_effort="max",
         web_search_options={"search_context_size": "medium"},
         tools=TOOLS,
-        tool_choice="auto",
+        tool_choice=(
+            {"type": "function", "function": {"name": "sandbox_execute"}}
+            if require_shell
+            else "auto"
+        ),
         stream=True,
         extra_body={"include_reasoning": True},
     )
@@ -628,6 +634,7 @@ def _run_job(job_id):
             raise JobCancelled()
         model_client = _new_model_client()
         last_model = None
+        require_shell = True
         while True:
             if storage.is_cancel_requested(job_id):
                 raise JobCancelled()
@@ -644,7 +651,7 @@ def _run_job(job_id):
                 )
                 last_model = model
             text, reasoning, tool_calls, finish_reason, redirected = _consume_stream(
-                job, model_client, sandbox, vm_id, agent_messages, model
+                job, model_client, sandbox, vm_id, agent_messages, model, require_shell=require_shell
             )
             if redirected or storage.has_redirects(job_id):
                 if text or reasoning:
@@ -655,7 +662,14 @@ def _run_job(job_id):
                 storage.save_agent_messages(job_id, agent_messages)
                 _append_redirects(job_id, agent_messages)
                 continue
+            if require_shell and not any(
+                (call.get("function") or {}).get("name") == "sandbox_execute"
+                for call in tool_calls
+                if isinstance(call, dict)
+            ):
+                raise RuntimeError("A modell nem indította el a kötelező shell-ellenőrzést.")
             if tool_calls:
+                require_shell = False
                 _handle_tool_calls(
                     job,
                     model_client,

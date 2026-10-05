@@ -1,62 +1,4 @@
-Send back the complete code with all the fixes. Fix each of the listed errors one by one, making sure to actually correct them so that there are 0 errors remaining. Keep the original imports, since the files exist. Write out every single character; do not abbreviate anything. Fix every error. There must be exactly one file. Do not write anything else; just output the complete code, and it must not contain any comments. Never, under any circumstances, use simplified, substitute, dummy, simulated, or fake code. Write the entire file as complete, unabridged, production-ready code in a single code block. It must be 100% error-free, a complete, error-free file, and must be submitted as a downloadable file. These requirements are mandatory and must be strictly adhered to. If no list of errors is provided, you must find all the errors and fix them. If there were comments in the original code, delete them. And most importantly: YOU MUST NEVER SIMPLIFY! 
-
-
-
-The query points to a core systems problem: an LLM agent is not merely a model with a larger prompt, but a harness-mediated dynamical system operating over an effectively unbounded trajectory.
-
-A useful abstraction is:
-
-sₜ₊₁ = E(sₜ, aₜ, oₜ)
-aₜ ~ πθ(Cₜ, sₜ)
-Cₜ = H(hₜ, sₜ)
-
-where sₜ is external/environmental state, aₜ is a model action or tool call, oₜ is the resulting observation, hₜ is interaction history, H is the harness/context policy, and Cₜ is the bounded context actually supplied to the model. The raw trajectory grows as actions and observations accumulate, while the model’s context window remains finite. This is explicitly identified as a central long-horizon-agent constraint: retaining the complete history eventually becomes impractical because context is finite and inference cost increases with input length. [Adapting Context Compression for Long-Horizon Agents with Counterfactual Continuations](https://arxiv.org/html/2609.36526 "arxiv.org/html/2609.36526")
-
-“State-space infinity” should therefore be understood in two related senses:
-
-1. The environment state can be effectively unbounded. Files, databases, websites, processes, browser sessions, generated artifacts, and external tool state can continue to change. Even if each individual variable is finite, their combinations and the number of possible trajectories are not practically enumerable.
-
-2. The agent’s history is unbounded. A ReAct-style loop repeatedly appends reasoning, actions, tool results, and observations. The resulting trajectory can outgrow any fixed context window, so the full state cannot remain directly visible to the model. [Language Model "Shape" | Alex L. Zhang](https://alexzhang13.github.io/blog/2026/shape/ "alexzhang13.github.io/blog/2026/shape")[Adapting Context Compression for Long-Horizon Agents with Counterfactual Continuations](https://arxiv.org/html/2609.36526 "arxiv.org/html/2609.36526")
-
-The harness is the mechanism that makes this unbounded process executable. It mediates between model and environment, constructs the next model input, maintains auxiliary state, and can transform or reject actions. A formal harness can therefore be viewed as a stateful transducer rather than as a prompt template. [Harness Evolution as Learning: Approximation, Generalization, and Optimization Limits of Self-Improving Personal Agents](https://arxiv.org/html/2609.36892 "arxiv.org/html/2609.36892") In practical loop engineering, the harness commonly includes persistent state, machine-checkable stop conditions, verifiers, token budgets, and escalation or recovery logic. [Loop Engineering: Building Blocks, Adoption, and Impact (Supplementary Material)](https://exa.ai/library/publication/vttz6ng0dfv "exa.ai/library/publication/vttz6ng0dfv")
-
-The key distinction is between operational state and model-visible context:
-
-• Operational state: the full external state required to continue execution, including files, tool outputs, checkpoints, structured task state, and persistent memory.
-• Model-visible context: a bounded projection of that state at the current step.
-• Harness policy: the procedure deciding what to retain, summarize, retrieve, compress, delegate, or expose next.
-
-An “infinite-context agent” is therefore not literally a model with an infinite context window. It is a finite-context model coupled to an unbounded external state store and a context-management policy. Candidate implementations include:
-
-• Lossy compaction: replace older history with summaries. This is simple but can discard details needed for later decisions. [Language Model "Shape" | Alex L. Zhang](https://alexzhang13.github.io/blog/2026/shape/ "alexzhang13.github.io/blog/2026/shape")[Adapting Context Compression for Long-Horizon Agents with Counterfactual Continuations](https://arxiv.org/html/2609.36526 "arxiv.org/html/2609.36526")
-• Retrieval-based memory: store history externally and retrieve relevant fragments on demand.
-• Structured belief state: maintain explicit entities, relations, unresolved requirements, evidence, and progress rather than relying on raw transcript retention. Recent work frames this as continual belief maintenance with consistency and stagnation checks. [Beyond Memory: Harnessing Long-Horizon Agents with Explicit Belief States](https://arxiv.org/html/2610.01415 "arxiv.org/html/2610.01415")
-• File-backed editable context: let the model maintain context as an externally stored file, including unrestricted updates and multiple contexts for multi-agent systems. [Context Language Models](https://arxiv.org/html/2609.37725 "arxiv.org/html/2609.37725")
-• Tail-recursive delegation: when the context approaches its limit, delegate continuation to another agent while passing prior history by reference plus a progress summary. [Harness as a Language: A Minimalist Agent Framework With Maximal Expressivity](https://arxiv.org/html/2609.26891 "arxiv.org/html/2609.26891")
-• Learned compaction: train the agent to decide when to compact, what state to preserve, and how to continue after compaction. AutoCompact reports improvements on coding benchmarks while keeping execution within fixed context budgets. [AutoCompact: Learning When to CompactContext in Long-Horizon Coding Agents](https://arxiv.org/html/2610.02163 "arxiv.org/html/2610.02163")
-• Adaptive action-space management: expose only a task-conditioned subset of a much larger, changing tool/action space, refreshing or revising it from execution feedback. [AnyAct: Universal Action for Self-Evolving Agents](https://arxiv.org/html/2609.37025 "arxiv.org/html/2609.37025")
-
-The central failure mode is not context overflow alone. It is state aliasing: two materially different world states can produce the same compressed context, causing the model to choose the same action despite different required behavior. Any compression scheme is safe only to the extent that it preserves distinctions relevant to future decisions. A summary that is linguistically plausible but omits a constraint, failed attempt, file mutation, credential-free session state, or unresolved dependency can make continuation incorrect while appearing coherent.
-
-A robust agent-loop harness should therefore maintain an explicit continuation state with at least:
-
-• current objective and acceptance conditions;
-• completed, pending, and blocked steps;
-• authoritative artifacts and their locations;
-• current environment facts and evidence supporting them;
-• actions already attempted and their outcomes;
-• unresolved questions and dependencies;
-• recovery/checkpoint information;
-• a bounded recent interaction window;
-• searchable long-term records for older details.
-
-The harness should compact based on semantic state transitions, not merely token count. Before compaction, it should extract durable facts, preserve exact references to authoritative artifacts, record failed approaches, identify open obligations, and verify that the post-compaction context can reproduce the next required decision. The loop should also detect stagnation, repeated actions, contradictory state, tool failure, and progress loss; otherwise an unbounded state space permits infinite looping rather than useful autonomy.
-
-The practical conclusion is: context-window scaling helps, but does not solve the problem. Larger windows delay truncation; they do not eliminate trajectory growth, retrieval requirements, stale observations, cost, or the need to distinguish relevant from irrelevant history. The durable architecture is a bounded-context policy operating over persistent external state, with explicit checkpoints, structured belief or task state, selective retrieval, compaction, delegation, and verifiable continuation. Recent harness research characterizes the same direction: the harness—not only the base model—determines the effective policy and can be revised or learned from execution feedback. [Harness Evolution as Learning: Approximation, Generalization, and Optimization Limits of Self-Improving Personal Agents
-
-
-                                                              
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           import base64
+import base64
 import json
 import mimetypes
 import os
@@ -71,6 +13,7 @@ from urllib.parse import urlsplit
 from instavm import InstaVM
 from openai import OpenAI
 
+import event_bus
 import storage
 
 
@@ -326,6 +269,118 @@ class JobCancelled(Exception):
     pass
 
 
+def _get_item(value, key, default=None):
+    if isinstance(value, dict):
+        return value.get(key, default)
+    return getattr(value, key, default)
+
+
+def _first_item(value, keys, default=None):
+    for key in keys:
+        item = _get_item(value, key, None)
+        if item is not None and item != "":
+            return item
+    return default
+
+
+def _record_payload(value, key):
+    nested = _get_item(value, key, None)
+    if nested is not None:
+        return nested
+    return value
+
+
+def _stringify_json(value):
+    return json.dumps(value, ensure_ascii=False, default=str)
+
+
+def _merge_stream_field(existing, piece):
+    piece = str(piece)
+    if not existing:
+        return piece
+    if piece == existing or existing.endswith(piece):
+        return existing
+    if piece.startswith(existing):
+        return piece
+    return existing + piece
+
+
+def _normalize_tool_calls(tool_calls):
+    normalized = []
+    for call in tool_calls or []:
+        if not isinstance(call, dict):
+            continue
+        function = call.get("function") if isinstance(call.get("function"), dict) else {}
+        name = str(function.get("name") or "").strip()
+        arguments = function.get("arguments")
+        if arguments is None:
+            arguments = "{}"
+        elif not isinstance(arguments, str):
+            arguments = _stringify_json(arguments)
+        call_id = str(call.get("id") or "").strip()
+        if not call_id:
+            call_id = "call_" + uuid.uuid4().hex
+        if not name:
+            name = "unknown_tool"
+        normalized.append(
+            {
+                "id": call_id,
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "arguments": arguments,
+                },
+            }
+        )
+    return normalized
+
+
+def _message_content_for_api(role, content, has_tool_calls):
+    if content is None:
+        if role == "assistant" and has_tool_calls:
+            return None
+        return ""
+    if role == "user":
+        if isinstance(content, (str, list)):
+            return content
+        return _stringify_json(content)
+    if isinstance(content, str):
+        return content
+    return _stringify_json(content)
+
+
+def _messages_for_api(agent_messages):
+    messages = []
+    for message in agent_messages:
+        if not isinstance(message, dict):
+            continue
+        role = message.get("role")
+        if role not in ("system", "user", "assistant", "tool"):
+            continue
+        if role == "tool":
+            tool_call_id = str(message.get("tool_call_id") or "").strip()
+            if not tool_call_id:
+                continue
+            content = message.get("content")
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "content": content if isinstance(content, str) else _stringify_json(content),
+                }
+            )
+            continue
+        tool_calls = _normalize_tool_calls(message.get("tool_calls")) if role == "assistant" and message.get("tool_calls") else []
+        api_message = {
+            "role": role,
+            "content": _message_content_for_api(role, message.get("content"), bool(tool_calls)),
+        }
+        if role == "assistant" and tool_calls:
+            api_message["tool_calls"] = tool_calls
+        messages.append(api_message)
+    return messages
+
+
 def launch_job(job_id):
     with _running_lock:
         if job_id in _running_jobs:
@@ -340,7 +395,8 @@ def resume_pending_jobs():
 
 
 def _event(job_id, payload):
-    storage.append_event(job_id, payload)
+    event_id = storage.append_event(job_id, payload)
+    event_bus.publish(job_id, event_id)
 
 
 def _progress(job_id, text):
@@ -360,18 +416,19 @@ def _make_client(session_id=None):
         raise RuntimeError("INSTAVM_API_KEY is not configured")
     client = InstaVM(api_key=api_key, auto_start_session=False, timeout=3600, max_retries=0)
     if session_id:
-        client.session_id = session_id
+        client.session_id = str(session_id)
     return client
 
 
 def _ensure_sandbox(conversation_id, vm_id, session_id, job_id):
     if vm_id and session_id:
+        vm_id = str(vm_id)
+        session_id = str(session_id)
         client = _make_client(session_id)
         try:
             record = client.vms.get(vm_id)
-            if isinstance(record.get("vm"), dict):
-                record = record["vm"]
-            vm_status = str(record.get("status") or record.get("state") or "")
+            record = _record_payload(record, "vm")
+            vm_status = str(_first_item(record, ("status", "state"), "") or "")
             vm_status = vm_status.strip().lower().replace("-", "_").replace(" ", "_")
             if vm_status in (
                 "terminated",
@@ -401,10 +458,18 @@ def _ensure_sandbox(conversation_id, vm_id, session_id, job_id):
         auto_suspend=True,
         auto_resume=True,
     )
-    vm_id = created.get("vm_id")
-    session_id = created.get("session_id")
+    created_vm = _record_payload(created, "vm")
+    created_session = _record_payload(created, "session")
+    vm_id = _first_item(created_vm, ("vm_id", "id"), None) or _first_item(created, ("vm_id", "id"), None)
+    session_id = (
+        _first_item(created_session, ("session_id", "id"), None)
+        or _first_item(created_vm, ("session_id", "vm_session_id"), None)
+        or _first_item(created, ("session_id", "vm_session_id"), None)
+    )
     if not vm_id or not session_id:
         raise RuntimeError("Az InstaVM nem adott vissza VM- és session-azonosítót")
+    vm_id = str(vm_id)
+    session_id = str(session_id)
     client.session_id = session_id
     storage.update_sandbox(conversation_id, vm_id, session_id)
     _event(
@@ -417,6 +482,17 @@ def _ensure_sandbox(conversation_id, vm_id, session_id, job_id):
     return client, vm_id, session_id
 
 
+def _browser_session_id(created):
+    if isinstance(created, str):
+        return created
+    created_session = _record_payload(created, "session")
+    session_id = (
+        _first_item(created_session, ("session_id", "browser_session_id", "id"), None)
+        or _first_item(created, ("session_id", "browser_session_id", "id"), None)
+    )
+    return str(session_id) if session_id else None
+
+
 def _ensure_browser_session(job, client):
     session_id = getattr(client, "_work_browser_session_id", None)
     if session_id:
@@ -426,22 +502,26 @@ def _ensure_browser_session(job, client):
     with _browser_sessions_lock:
         session_id = _browser_sessions.get(conversation_id)
         if session_id:
-            try:
-                info = client.get_browser_session(session_id)
-                if isinstance(info, dict):
-                    details = info.get("session") if isinstance(info.get("session"), dict) else info
-                    status = str(details.get("status") or details.get("state") or "").strip().lower()
+            get_browser_session = getattr(client, "get_browser_session", None)
+            if callable(get_browser_session):
+                try:
+                    info = get_browser_session(session_id)
+                    details = _record_payload(info, "session")
+                    status = str(_first_item(details, ("status", "state"), "") or "").strip().lower()
                     if status in {"closed", "deleted", "expired", "failed", "killed"}:
                         session_id = None
-            except Exception as error:
-                message = str(error).lower()
-                if "not found" in message or "expired" in message:
-                    session_id = None
-                else:
-                    raise
+                except Exception as error:
+                    message = str(error).lower()
+                    if "not found" in message or "expired" in message:
+                        session_id = None
+                    else:
+                        raise
 
         if not session_id:
-            session_id = client.create_browser_session()
+            create_browser_session = getattr(client, "create_browser_session", None)
+            if not callable(create_browser_session):
+                raise RuntimeError("Az InstaVM kliens nem támogatja a böngésző-session létrehozását")
+            session_id = _browser_session_id(create_browser_session())
             if not session_id:
                 raise RuntimeError("Az InstaVM nem adott vissza böngésző-session azonosítót")
             _browser_sessions[conversation_id] = session_id
@@ -497,19 +577,33 @@ def _browser_inspect(client, session_id):
         readable = dict(readable)
         readable["content"] = readable["content"][:30000]
         output["readable_content"] = readable
+    elif isinstance(readable, str):
+        output["readable_content"] = readable[:30000]
     for key in ("interactive_elements", "content_anchors"):
         if key in result:
             output[key] = result[key][:40] if isinstance(result[key], list) else result[key]
     return output
 
 
-def _browser_screenshot(job, client, session_id, full_page):
-    encoded = client.browser_screenshot(session_id=session_id, full_page=full_page, format="png")
-    if not isinstance(encoded, str) or not encoded:
+def _extract_base64_image(value):
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, dict):
+        for key in ("base64", "image", "data", "screenshot", "content"):
+            item = value.get(key)
+            if item:
+                return _extract_base64_image(item)
         raise RuntimeError("A böngésző nem adott vissza képernyőképet")
+    if not isinstance(value, str) or not value:
+        raise RuntimeError("A böngésző nem adott vissza képernyőképet")
+    encoded = value
     if encoded.startswith("data:") and "," in encoded:
         encoded = encoded.split(",", 1)[1]
-    image = base64.b64decode(encoded, validate=True)
+    return base64.b64decode(encoded, validate=True)
+
+
+def _browser_screenshot(job, client, session_id, full_page):
+    image = _extract_base64_image(client.browser_screenshot(session_id=session_id, full_page=full_page, format="png"))
     artifact_id = str(uuid.uuid4())
     name = "browser-screenshot.png"
     storage.create_artifact(
@@ -566,7 +660,7 @@ def _execute_browser_tool(name, args, job, client):
         return client.browser_scroll(
             session_id=session_id,
             selector=args.get("selector"),
-            x=args.get("x"),
+            x=int(args.get("x", 0)),
             y=int(args["y"]),
         )
     if name == "browser_wait":
@@ -587,33 +681,32 @@ def _execute_browser_tool(name, args, job, client):
 def _text_from_execution(result):
     if isinstance(result, str):
         return result
-    if not isinstance(result, dict):
-        return json.dumps(result, ensure_ascii=False, default=str)
     parts = []
-    for key in ("stdout", "output", "result", "stderr", "error"):
-        value = result.get(key)
+    for key in ("stdout", "output", "result", "stderr", "error", "error_message"):
+        value = _get_item(result, key, None)
         if value is None or value == "":
             continue
         if isinstance(value, (dict, list)):
-            parts.append(json.dumps(value, ensure_ascii=False, default=str))
+            parts.append(_stringify_json(value))
         else:
             parts.append(str(value))
-    if not parts:
-        return json.dumps(result, ensure_ascii=False, default=str)
-    return "\n".join(parts)
+    if parts:
+        return "\n".join(parts)
+    return _stringify_json(result)
 
 
 def _execution_failed(result):
-    if not isinstance(result, dict):
+    if result is None or isinstance(result, str):
         return False
-    if result.get("success") is False:
+    if _get_item(result, "success", None) is False:
         return True
-    if result.get("status") in ("error", "failed", "failure"):
+    status = _get_item(result, "status", None)
+    if isinstance(status, str) and status.lower() in ("error", "failed", "failure"):
         return True
     for key in ("exit_code", "return_code", "returncode"):
-        if result.get(key) not in (None, 0):
+        if _get_item(result, key, None) not in (None, 0):
             return True
-    return bool(result.get("error") or result.get("error_message"))
+    return bool(_get_item(result, "error", None) or _get_item(result, "error_message", None))
 
 
 def _run_command(client, command):
@@ -627,9 +720,14 @@ def _remote_output(client, command, allow_empty=False):
     result = client.execute(command, language="bash", timeout=3600)
     if _execution_failed(result):
         raise RuntimeError(_text_from_execution(result))
-    output = result.get("stdout") or result.get("output") or result.get("result") or ""
-    if isinstance(output, dict):
-        output = output.get("stdout") or output.get("output") or ""
+    if isinstance(result, dict):
+        output = result.get("stdout") or result.get("output") or result.get("result") or ""
+        if isinstance(output, dict):
+            output = output.get("stdout") or output.get("output") or ""
+        if isinstance(output, (list, tuple)):
+            output = "\n".join(str(item) for item in output)
+    else:
+        output = _text_from_execution(result)
     if not output and not allow_empty:
         raise RuntimeError(_text_from_execution(result))
     return str(output).strip()
@@ -637,7 +735,7 @@ def _remote_output(client, command, allow_empty=False):
 
 def _publish_file(job, client, args):
     path = str(args["path"])
-    name = str(args["name"])
+    name = str(args["name"] or "").strip() or os.path.basename(path) or "artifact"
     encoded = _remote_output(
         client,
         "python3 -c "
@@ -648,7 +746,7 @@ def _publish_file(job, client, args):
         + shlex.quote(path),
         allow_empty=True,
     )
-    content = base64.b64decode(encoded, validate=True)
+    content = base64.b64decode(encoded, validate=True) if encoded else b""
     artifact_id = str(uuid.uuid4())
     content_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
     storage.create_artifact(
@@ -686,22 +784,25 @@ def _publish_site(job, client, vm_id, args):
     _run_command(client, launch)
     time.sleep(1)
     share = client.shares.create(port=port, vm_id=vm_id, is_public=True)
-    url = share.get("url") or share.get("public_url") or share.get("share_url")
+    share_record = _record_payload(share, "share")
+    url = _first_item(share_record, ("url", "public_url", "share_url"), None) or _first_item(share, ("url", "public_url", "share_url"), None)
     if not url:
         raise RuntimeError("Az InstaVM nem adott vissza nyilvános webhely-URL-t")
+    share_id = _first_item(share_record, ("share_id", "id"), None) or _first_item(share, ("share_id", "id"), None)
     artifact_id = str(uuid.uuid4())
-    content = json.dumps({"url": url, "share_id": share.get("share_id")}).encode()
+    content = json.dumps({"url": url, "share_id": share_id}, ensure_ascii=False).encode()
+    artifact_name = str(args["name"] or "").strip() or "site"
     storage.create_artifact(
         artifact_id,
         job["conversation_id"],
         job["job_id"],
-        str(args["name"]),
+        artifact_name,
         "application/vnd.instavm.site-link+json",
         content,
     )
     artifact = {
         "artifact_id": artifact_id,
-        "name": str(args["name"]),
+        "name": artifact_name,
         "content_type": "text/html",
         "url": url,
     }
@@ -710,6 +811,8 @@ def _publish_site(job, client, vm_id, args):
 
 
 def _execute_tool(name, args, job, client, vm_id):
+    if not isinstance(args, dict):
+        raise ValueError("Az eszközargumentumoknak objektumnak kell lenniük")
     if name == "update_checklist":
         return _update_checklist(job, args)
     if name.startswith("browser_"):
@@ -731,9 +834,12 @@ def _execute_tool(name, args, job, client, vm_id):
             result = client.upload_file(temporary_path, path)
             if _execution_failed(result):
                 raise RuntimeError(_text_from_execution(result))
-            return result
+            return result if result is not None else {"path": path, "uploaded": True}
         finally:
-            os.unlink(temporary_path)
+            try:
+                os.unlink(temporary_path)
+            except FileNotFoundError:
+                pass
     if name == "publish_file":
         return _publish_file(job, client, args)
     if name == "publish_site":
@@ -787,9 +893,51 @@ def _contains_image(value):
 
 
 def _model_for_messages(agent_messages):
-    if any(message.get("role") == "user" and _contains_image(message.get("content")) for message in agent_messages):
+    if any(message.get("role") == "user" and _contains_image(message.get("content")) for message in agent_messages if isinstance(message, dict)):
         return IMAGE_MODEL
     return MODEL
+
+
+def _extended_completion_options_error(error):
+    text = str(error).lower()
+    needles = (
+        "unknown parameter",
+        "unsupported parameter",
+        "unrecognized request argument",
+        "unexpected keyword",
+        "extra inputs are not permitted",
+        "web_search_options",
+        "reasoning_effort",
+        "include_reasoning",
+        "extra_body",
+    )
+    return any(needle in text for needle in needles)
+
+
+def _completion_stream(client, model, agent_messages, tool_choice):
+    request = {
+        "model": model,
+        "temperature": 1,
+        "top_p": 1,
+        "messages": _messages_for_api(agent_messages),
+        "max_tokens": 120000,
+        "reasoning_effort": "max",
+        "web_search_options": {"search_context_size": "medium"},
+        "tools": TOOLS,
+        "tool_choice": tool_choice,
+        "stream": True,
+        "extra_body": {"include_reasoning": True},
+    }
+    try:
+        return client.chat.completions.create(**request)
+    except Exception as error:
+        if not _extended_completion_options_error(error):
+            raise
+        fallback = dict(request)
+        fallback.pop("reasoning_effort", None)
+        fallback.pop("web_search_options", None)
+        fallback.pop("extra_body", None)
+        return client.chat.completions.create(**fallback)
 
 
 def _consume_stream(
@@ -802,73 +950,72 @@ def _consume_stream(
     require_shell=False,
     require_checklist=False,
 ):
-    completion = client.chat.completions.create(
-        model=model,
-        temperature=1,
-        top_p=1,
-        messages=agent_messages,
-        max_tokens=120000,
-        reasoning_effort="max",
-        web_search_options={"search_context_size": "medium"},
-        tools=TOOLS,
-        tool_choice=(
-            {"type": "function", "function": {"name": "sandbox_execute"}}
-            if require_shell
-            else (
-                {"type": "function", "function": {"name": "update_checklist"}}
-                if require_checklist
-                else "auto"
-            )
-        ),
-        stream=True,
-        extra_body={"include_reasoning": True},
+    tool_choice = (
+        {"type": "function", "function": {"name": "sandbox_execute"}}
+        if require_shell
+        else (
+            {"type": "function", "function": {"name": "update_checklist"}}
+            if require_checklist
+            else "auto"
+        )
     )
+    completion = _completion_stream(client, model, agent_messages, tool_choice)
     text = []
     reasoning = []
     tool_calls = {}
     finish_reason = None
     was_redirected = False
+    cancel_event = storage.cancel_event(job["job_id"])
+    redirect_event = storage.redirect_event(job["job_id"])
     try:
         for chunk in completion:
-            if storage.is_cancel_requested(job["job_id"]):
+            if cancel_event.is_set():
                 raise JobCancelled()
-            if storage.has_redirects(job["job_id"]):
+            if redirect_event.is_set():
                 was_redirected = True
                 break
-            choice = chunk.choices[0] if chunk.choices else None
+            choices = _get_item(chunk, "choices", None) or []
+            choice = choices[0] if choices else None
             if not choice:
                 continue
-            delta = choice.delta
-            content_delta = getattr(delta, "content", None)
-            reasoning_delta = getattr(delta, "reasoning_content", None) or getattr(delta, "reasoning", None)
+            delta = _get_item(choice, "delta", None)
+            content_delta = _get_item(delta, "content", None)
+            reasoning_delta = _get_item(delta, "reasoning_content", None) or _get_item(delta, "reasoning", None)
             if isinstance(content_delta, str) and content_delta:
                 text.append(content_delta)
                 _event(job["job_id"], {"type": "delta", "content": content_delta})
             if isinstance(reasoning_delta, str) and reasoning_delta:
                 reasoning.append(reasoning_delta)
                 _event(job["job_id"], {"type": "delta", "reasoning_content": reasoning_delta})
-            for call_delta in getattr(delta, "tool_calls", None) or []:
-                index = call_delta.index
+            for call_delta in _get_item(delta, "tool_calls", None) or []:
+                call_index = _get_item(call_delta, "index", None)
+                if call_index is None:
+                    call_index = 0 if not tool_calls else max(tool_calls.keys()) + 1
                 record = tool_calls.setdefault(
-                    index,
+                    int(call_index),
                     {"id": "", "type": "function", "function": {"name": "", "arguments": ""}},
                 )
-                if call_delta.id:
-                    record["id"] += call_delta.id
-                if call_delta.type:
-                    record["type"] = call_delta.type
-                function = call_delta.function
-                if function and function.name:
-                    record["function"]["name"] += function.name
-                if function and function.arguments:
-                    record["function"]["arguments"] += function.arguments
-            if choice.finish_reason:
-                finish_reason = choice.finish_reason
+                call_id = _get_item(call_delta, "id", None)
+                call_type = _get_item(call_delta, "type", None)
+                function = _get_item(call_delta, "function", None)
+                function_name = _get_item(function, "name", None)
+                function_arguments = _get_item(function, "arguments", None)
+                if call_id:
+                    record["id"] = _merge_stream_field(record["id"], call_id)
+                if call_type:
+                    record["type"] = str(call_type)
+                if function_name:
+                    record["function"]["name"] = _merge_stream_field(record["function"]["name"], function_name)
+                if function_arguments:
+                    record["function"]["arguments"] += str(function_arguments)
+            choice_finish_reason = _get_item(choice, "finish_reason", None)
+            if choice_finish_reason:
+                finish_reason = choice_finish_reason
     finally:
         close = getattr(completion, "close", None)
-        if close:
+        if callable(close):
             close()
-    return "".join(text), "".join(reasoning), [tool_calls[index] for index in sorted(tool_calls)], finish_reason, was_redirected
+    return "".join(text), "".join(reasoning), _normalize_tool_calls([tool_calls[index] for index in sorted(tool_calls)]), finish_reason, was_redirected
 
 
 def _repair_dangling_tool_calls(job_id, agent_messages):
@@ -877,10 +1024,15 @@ def _repair_dangling_tool_calls(job_id, agent_messages):
     index = 0
     while index < len(agent_messages):
         message = agent_messages[index]
-        tool_calls = message.get("tool_calls") if message.get("role") == "assistant" else None
+        tool_calls = message.get("tool_calls") if isinstance(message, dict) and message.get("role") == "assistant" else None
         if not isinstance(tool_calls, list) or not tool_calls:
             index += 1
             continue
+        normalized_calls = _normalize_tool_calls(tool_calls)
+        if normalized_calls != tool_calls:
+            message["tool_calls"] = normalized_calls
+            tool_calls = normalized_calls
+            changed = True
         expected_ids = {
             call.get("id")
             for call in tool_calls
@@ -888,7 +1040,7 @@ def _repair_dangling_tool_calls(job_id, agent_messages):
         }
         cursor = index + 1
         completed_ids = set()
-        while cursor < len(agent_messages) and agent_messages[cursor].get("role") == "tool":
+        while cursor < len(agent_messages) and isinstance(agent_messages[cursor], dict) and agent_messages[cursor].get("role") == "tool":
             call_id = agent_messages[cursor].get("tool_call_id")
             if call_id in expected_ids:
                 completed_ids.add(call_id)
@@ -932,10 +1084,11 @@ def _repair_dangling_tool_calls(job_id, agent_messages):
 
 
 def _handle_tool_calls(job, client, sandbox, vm_id, agent_messages, assistant_text, reasoning, tool_calls):
+    tool_calls = _normalize_tool_calls(tool_calls)
     assistant_message = {"role": "assistant", "content": assistant_text or None, "tool_calls": tool_calls}
-    agent_messages.append(assistant_message)
     if reasoning:
         assistant_message["reasoning_content"] = reasoning
+    agent_messages.append(assistant_message)
     storage.save_agent_messages(job["job_id"], agent_messages)
     for index, tool_call in enumerate(tool_calls):
         if storage.is_cancel_requested(job["job_id"]):
@@ -977,6 +1130,8 @@ def _handle_tool_calls(job, client, sandbox, vm_id, agent_messages, assistant_te
         )
         try:
             args = json.loads(tool_call["function"]["arguments"] or "{}")
+            if not isinstance(args, dict):
+                raise ValueError("Az eszközargumentumoknak JSON-objektumnak kell lenniük")
             result = _execute_tool(name, args, job, sandbox, vm_id)
             tool_result = {"ok": True, "result": result}
             _event(
@@ -1001,11 +1156,27 @@ def _handle_tool_calls(job, client, sandbox, vm_id, agent_messages, assistant_te
         storage.save_agent_messages(job["job_id"], agent_messages)
 
 
+def _tool_names(tool_calls):
+    names = set()
+    for call in tool_calls:
+        if isinstance(call, dict):
+            function = call.get("function") if isinstance(call.get("function"), dict) else {}
+            name = function.get("name")
+            if name:
+                names.add(name)
+    return names
+
+
 def _run_job(job_id):
     try:
         job = storage.get_job_and_conversation(job_id)
         if not job or job["status"] != "running":
             return
+        storage.initialize_job_state(
+            job_id,
+            cancel_requested=bool(job.get("cancel_requested")),
+            has_redirects=bool(job.get("redirects")),
+        )
         if storage.is_cancel_requested(job_id):
             raise JobCancelled()
         agent_messages = job["agent_messages"] or []
@@ -1071,22 +1242,15 @@ def _run_job(job_id):
                 storage.save_agent_messages(job_id, agent_messages)
                 _append_redirects(job_id, agent_messages)
                 continue
-            if require_shell and not any(
-                (call.get("function") or {}).get("name") == "sandbox_execute"
-                for call in tool_calls
-                if isinstance(call, dict)
-            ):
+            names = _tool_names(tool_calls)
+            if require_shell and "sandbox_execute" not in names:
                 raise RuntimeError("A modell nem indította el a kötelező shell-ellenőrzést.")
-            if require_checklist and not any(
-                (call.get("function") or {}).get("name") == "update_checklist"
-                for call in tool_calls
-                if isinstance(call, dict)
-            ):
+            if require_checklist and "update_checklist" not in names:
                 raise RuntimeError("A modell nem hozta létre a kötelező feladat-ellenőrzőlistát.")
             if tool_calls:
                 if require_shell:
                     require_shell = False
-                    require_checklist = True
+                    require_checklist = "update_checklist" not in names
                 elif require_checklist:
                     require_checklist = False
                 _handle_tool_calls(
@@ -1103,9 +1267,20 @@ def _run_job(job_id):
             if text or reasoning:
                 if text:
                     agent_messages.append({"role": "assistant", "content": text})
+                elif reasoning:
+                    agent_messages.append({"role": "assistant", "content": ""})
                 if reasoning:
                     _event(job_id, {"type": "agent_event", "event": {"type": "model_output"}})
                 storage.save_agent_messages(job_id, agent_messages)
+                if finish_reason == "length":
+                    agent_messages.append(
+                        {
+                            "role": "user",
+                            "content": "Continue exactly where you stopped. Do not repeat completed content.",
+                        }
+                    )
+                    storage.save_agent_messages(job_id, agent_messages)
+                    continue
                 break
             if finish_reason == "stop":
                 break
@@ -1124,3 +1299,4 @@ def _run_job(job_id):
     finally:
         with _running_lock:
             _running_jobs.discard(job_id)
+        storage.clear_job_state(job_id)

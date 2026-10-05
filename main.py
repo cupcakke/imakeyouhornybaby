@@ -1,18 +1,24 @@
+import asyncio
 import json
 import mimetypes
 import os
 import re
-import time
 import uuid
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from contextlib import asynccontextmanager
 from pathlib import Path
-from urllib.parse import parse_qs, quote_from_bytes, unquote, urlsplit
+from urllib.parse import quote_from_bytes
 
 import agent
 import storage
+import event_bus
+import uvicorn
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
+from starlette.concurrency import run_in_threadpool
 
 
 ROOT = Path(__file__).resolve().parent
+TERMINAL_JOB_STATUSES = {"completed", "cancelled", "failed"}
 
 
 def json_bytes(value):
@@ -35,250 +41,274 @@ def conversation_title(messages):
     return "Beszélgetés"
 
 
-class ApplicationServer(ThreadingHTTPServer):
-    daemon_threads = True
-    allow_reuse_address = True
+@asynccontextmanager
+async def lifespan(application):
+    await run_in_threadpool(storage.open_pool)
+    try:
+        await run_in_threadpool(agent.resume_pending_jobs)
+        yield
+    finally:
+        await run_in_threadpool(storage.close_pool)
 
 
-class RequestHandler(BaseHTTPRequestHandler):
-    protocol_version = "HTTP/1.1"
-    server_version = "ChatWorkbench"
-    sys_version = ""
+app = FastAPI(lifespan=lifespan)
 
-    def log_message(self, format_string, *args):
-        return
 
-    def _send(self, status, content, content_type="application/json; charset=utf-8", headers=None):
-        self.send_response(status)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(content)))
-        self.send_header("Cache-Control", "no-store")
-        self.send_header("X-Content-Type-Options", "nosniff")
-        for key, value in (headers or {}).items():
-            self.send_header(key, value)
-        self.end_headers()
-        if content:
-            self.wfile.write(content)
-
-    def _json(self, status, value, headers=None):
-        self._send(status, json_bytes(value), headers=headers)
-
-    def _body(self):
-        try:
-            length = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
-            raise ValueError("Invalid Content-Length")
-        raw = self.rfile.read(length)
-        if not raw:
-            return {}
-        value = json.loads(raw)
-        if not isinstance(value, dict):
-            raise ValueError("A JSON object is required")
-        return value
-
-    def do_GET(self):
-        parsed = urlsplit(self.path)
-        path = unquote(parsed.path)
-        if path == "/api/health":
-            self._json(200, {"status": "ok"})
-            return
-        if path == "/api/conversations":
-            query = parse_qs(parsed.query)
-            ids = [value for item in query.get("ids", []) for value in item.split(",") if value]
-            conversations = storage.list_conversations(ids)
-            self._json(200, {"conversations": conversations})
-            return
-        if path.startswith("/api/chat/jobs/") and path.endswith("/events"):
-            job_id = path[len("/api/chat/jobs/") : -len("/events")].strip("/")
-            after = parse_qs(parsed.query).get("after", ["0"])[0]
+async def _stream_job_events(job_id, after):
+    subscription = event_bus.subscribe(job_id)
+    last_event_id = after
+    try:
+        while True:
+            events = await run_in_threadpool(storage.list_events, job_id, last_event_id)
+            for event in events:
+                event_id = int(event["event_id"])
+                payload = json_bytes(event["payload"]).decode("utf-8")
+                yield f"id: {event_id}\ndata: {payload}\n\n"
+                last_event_id = event_id
+            current = await run_in_threadpool(storage.get_job, job_id)
+            if current is None or current["status"] in TERMINAL_JOB_STATUSES:
+                return
             try:
-                after_id = max(0, int(after))
-            except ValueError:
-                self._json(400, {"error": "Érvénytelen eseményazonosító"})
-                return
-            self._stream_job_events(job_id, after_id)
-            return
-        if path.startswith("/api/artifacts/"):
-            self._serve_artifact(path.rsplit("/", 1)[-1])
-            return
-        if path.startswith("/api/"):
-            self._json(404, {"error": "Nem található"})
-            return
-        self._serve_static(path)
+                signal = await asyncio.wait_for(subscription.queue.get(), timeout=15)
+                if signal.event_id > 0 and signal.event_id <= last_event_id:
+                    continue
+            except asyncio.TimeoutError:
+                yield 'data: {"type":"keep-alive"}\n\n'
+    finally:
+        event_bus.unsubscribe(subscription)
 
-    def do_POST(self):
-        parsed = urlsplit(self.path)
-        path = unquote(parsed.path)
-        try:
-            body = self._body()
-        except (ValueError, json.JSONDecodeError) as error:
-            self._json(400, {"error": str(error)})
-            return
-        if path == "/api/chat":
-            self._start_chat(body)
-            return
-        match = re.fullmatch(r"/api/chat/jobs/([^/]+)/stop", path)
-        if match:
-            stopped = storage.request_cancel(match.group(1))
-            self._json(200 if stopped else 409, {"stopped": stopped})
-            return
-        match = re.fullmatch(r"/api/chat/jobs/([^/]+)/redirect", path)
-        if match:
-            message = body.get("message", body.get("content"))
-            valid_text = isinstance(message, str) and bool(message.strip())
-            valid_parts = isinstance(message, list) and any(
-                isinstance(part, dict)
-                and (
-                    (part.get("type") == "text" and isinstance(part.get("text"), str) and part["text"].strip())
-                    or part.get("type") in ("image_url", "input_image")
-                    or "image_url" in part
-                )
-                for part in message
-            )
-            if not valid_text and not valid_parts:
-                self._json(400, {"error": "Az új irány nem lehet üres"})
-                return
-            redirect_content = message.strip() if valid_text else message
-            conversation_id = storage.add_redirect(match.group(1), redirect_content)
-            if not conversation_id:
-                self._json(409, {"error": "A Work-feladat már nem fut"})
-                return
-            self._json(202, {"accepted": True})
-            return
-        self._json(404, {"error": "Nem található"})
 
-    def _start_chat(self, body):
-        supplied_id = body.get("conversation_id")
-        conversation_id = supplied_id if isinstance(supplied_id, str) and supplied_id.strip() else str(uuid.uuid4())
-        supplied_messages = body.get("messages")
-        if not isinstance(supplied_messages, list):
-            self._json(400, {"error": {"message": "A messages mezőnek tömbnek kell lennie"}})
-            return
-        messages = []
-        for item in supplied_messages:
-            if not isinstance(item, dict) or item.get("role") not in ("user", "assistant"):
-                continue
-            content = item.get("content")
-            if isinstance(content, (str, list)):
-                messages.append({"role": item["role"], "content": content})
-        if not messages or not any(message["role"] == "user" for message in messages):
-            self._json(400, {"error": {"message": "A beszélgetéshez legalább egy felhasználói üzenet szükséges"}})
-            return
-        title = conversation_title(messages)
-        storage.upsert_conversation(conversation_id, messages, title)
-        job_id = str(uuid.uuid4())
-        agent_messages = [{"role": "system", "content": agent.SYSTEM_MESSAGE}]
-        agent_messages.extend(messages)
-        storage.create_job(job_id, conversation_id, agent_messages)
-        storage.append_event(
-            job_id,
-            {"type": "meta", "conversation_id": conversation_id, "job_id": job_id, "work_task": True},
+def _event_stream_response(job_id, after, headers=None):
+    response_headers = {
+        "Cache-Control": "no-cache, no-transform",
+        "Connection": "keep-alive",
+        "X-Accel-Buffering": "no",
+        "X-Content-Type-Options": "nosniff",
+    }
+    if headers:
+        response_headers.update(headers)
+    return StreamingResponse(
+        _stream_job_events(job_id, after),
+        media_type="text/event-stream",
+        headers=response_headers,
+    )
+
+
+@app.get("/api/health")
+async def health():
+    return JSONResponse({"status": "ok"})
+
+
+@app.get("/api/conversations")
+async def conversations(request: Request):
+    ids = [
+        value
+        for item in request.query_params.getlist("ids")
+        for value in item.split(",")
+        if value
+    ]
+    result = await run_in_threadpool(storage.list_conversations, ids)
+    return JSONResponse({"conversations": result})
+
+
+@app.get("/api/chat/jobs/{job_id}/events")
+async def get_job_events(job_id: str, request: Request):
+    try:
+        after_id = max(0, int(request.query_params.get("after", "0")))
+    except ValueError:
+        return JSONResponse({"error": "Érvénytelen eseményazonosító"}, status_code=400)
+    job = await run_in_threadpool(storage.get_job, job_id)
+    if not job:
+        return JSONResponse({"error": "A Work-feladat nem található"}, status_code=404)
+    return _event_stream_response(job_id, after_id)
+
+
+@app.post("/api/chat/jobs/{job_id}/stop")
+async def stop_job(job_id: str):
+    stopped = await run_in_threadpool(storage.request_cancel, job_id)
+    return JSONResponse({"stopped": stopped}, status_code=200 if stopped else 409)
+
+
+@app.post("/api/chat/jobs/{job_id}/redirect")
+async def redirect_job(job_id: str, request: Request):
+    try:
+        body = await request.json()
+    except (ValueError, json.JSONDecodeError):
+        return JSONResponse({"error": "Érvénytelen JSON"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "A JSON object is required"}, status_code=400)
+    message = body.get("message", body.get("content"))
+    valid_text = isinstance(message, str) and bool(message.strip())
+    valid_parts = isinstance(message, list) and any(
+        isinstance(part, dict)
+        and (
+            (part.get("type") == "text" and isinstance(part.get("text"), str) and part["text"].strip())
+            or part.get("type") in ("image_url", "input_image")
+            or "image_url" in part
         )
-        self.send_response(200)
-        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
-        self.send_header("Cache-Control", "no-cache, no-transform")
-        self.send_header("Connection", "keep-alive")
-        self.send_header("X-Accel-Buffering", "no")
-        self.send_header("X-Chat-Job-Id", job_id)
-        self.send_header("X-Content-Type-Options", "nosniff")
-        self.end_headers()
-        agent.launch_job(job_id)
-        self._stream_job_events(job_id, 0, headers_sent=True)
+        for part in message
+    )
+    if not valid_text and not valid_parts:
+        return JSONResponse({"error": "Az új irány nem lehet üres"}, status_code=400)
+    redirect_content = message.strip() if valid_text else message
+    conversation_id = await run_in_threadpool(
+        storage.add_redirect,
+        job_id,
+        redirect_content,
+    )
+    if not conversation_id:
+        return JSONResponse({"error": "A Work-feladat már nem fut"}, status_code=409)
+    return JSONResponse({"accepted": True}, status_code=202)
 
-    def _stream_job_events(self, job_id, after, headers_sent=False):
-        if not headers_sent:
-            job = storage.get_job(job_id)
-            if not job:
-                self._json(404, {"error": "A Work-feladat nem található"})
-                return
-            self.send_response(200)
-            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
-            self.send_header("Cache-Control", "no-cache, no-transform")
-            self.send_header("Connection", "keep-alive")
-            self.send_header("X-Accel-Buffering", "no")
-            self.send_header("X-Content-Type-Options", "nosniff")
-            self.end_headers()
-        last_event_id = after
-        try:
-            while True:
-                events = storage.list_events(job_id, last_event_id)
-                for event in events:
-                    data = b"id: " + str(event["event_id"]).encode() + b"\ndata: " + json_bytes(event["payload"]) + b"\n\n"
-                    self.wfile.write(data)
-                    self.wfile.flush()
-                    last_event_id = event["event_id"]
-                current = storage.get_job(job_id)
-                if not current or current["status"] not in ("queued", "running"):
-                    return
-                if not events:
-                    self.wfile.write(b": keep-alive\n\n")
-                    self.wfile.flush()
-                time.sleep(0.7)
-        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, OSError):
-            return
 
-    def _serve_artifact(self, artifact_id):
-        if not re.fullmatch(r"[0-9a-fA-F-]{36}", artifact_id):
-            self._json(404, {"error": "A fájl nem található"})
-            return
-        artifact = storage.get_artifact(artifact_id)
-        if not artifact:
-            self._json(404, {"error": "A fájl nem található"})
-            return
-        if artifact["content_type"] == "application/vnd.instavm.site-link+json":
-            try:
-                site = json.loads(bytes(artifact["content"]).decode())
-                url = site["url"]
-            except (ValueError, KeyError, UnicodeDecodeError):
-                self._json(500, {"error": "A Site-hivatkozás sérült"})
-                return
-            if not isinstance(url, str) or not url.startswith("https://"):
-                self._json(500, {"error": "A Site-hivatkozás érvénytelen"})
-                return
-            self.send_response(302)
-            self.send_header("Location", url)
-            self.send_header("Cache-Control", "no-store")
-            self.send_header("Content-Length", "0")
-            self.end_headers()
-            return
-        name = artifact["name"].replace("\r", "").replace("\n", "").replace('"', "")
-        encoded_name = quote_from_bytes(name.encode("utf-8"))
-        fallback_name = name.encode("ascii", "ignore").decode() or "artifact"
-        disposition = f"attachment; filename=\"{fallback_name}\"; filename*=UTF-8''{encoded_name}"
-        self._send(
-            200,
-            bytes(artifact["content"]),
-            artifact["content_type"],
-            {"Content-Disposition": disposition},
+@app.post("/api/chat")
+async def start_chat(request: Request):
+    try:
+        body = await request.json()
+    except (ValueError, json.JSONDecodeError):
+        return JSONResponse(
+            {"error": {"message": "Érvénytelen JSON"}},
+            status_code=400,
         )
+    if not isinstance(body, dict):
+        return JSONResponse(
+            {"error": {"message": "A JSON object is required"}},
+            status_code=400,
+        )
+    supplied_id = body.get("conversation_id")
+    conversation_id = (
+        supplied_id
+        if isinstance(supplied_id, str) and supplied_id.strip()
+        else str(uuid.uuid4())
+    )
+    supplied_messages = body.get("messages")
+    if not isinstance(supplied_messages, list):
+        return JSONResponse(
+            {"error": {"message": "A messages mezőnek tömbnek kell lennie"}},
+            status_code=400,
+        )
+    messages = []
+    for item in supplied_messages:
+        if not isinstance(item, dict) or item.get("role") not in ("user", "assistant"):
+            continue
+        content = item.get("content")
+        if isinstance(content, (str, list)):
+            messages.append({"role": item["role"], "content": content})
+    if not messages or not any(message["role"] == "user" for message in messages):
+        return JSONResponse(
+            {"error": {"message": "A beszélgetéshez legalább egy felhasználói üzenet szükséges"}},
+            status_code=400,
+        )
+    title = conversation_title(messages)
+    await run_in_threadpool(
+        storage.upsert_conversation,
+        conversation_id,
+        messages,
+        title,
+    )
+    job_id = str(uuid.uuid4())
+    agent_messages = [{"role": "system", "content": agent.SYSTEM_MESSAGE}]
+    agent_messages.extend(messages)
+    await run_in_threadpool(
+        storage.create_job,
+        job_id,
+        conversation_id,
+        agent_messages,
+    )
+    event_id = await run_in_threadpool(
+        storage.append_event,
+        job_id,
+        {
+            "type": "meta",
+            "conversation_id": conversation_id,
+            "job_id": job_id,
+            "work_task": True,
+        },
+    )
+    event_bus.publish(job_id, event_id)
+    agent.launch_job(job_id)
+    return _event_stream_response(
+        job_id,
+        0,
+        {"X-Chat-Job-Id": job_id},
+    )
 
-    def _serve_static(self, request_path):
-        relative = Path(request_path.lstrip("/") or "index.html")
-        target = (ROOT / relative).resolve()
+
+@app.get("/api/artifacts/{artifact_id}")
+async def serve_artifact(artifact_id: str):
+    if not re.fullmatch(r"[0-9a-fA-F-]{36}", artifact_id):
+        return JSONResponse({"error": "A fájl nem található"}, status_code=404)
+    artifact = await run_in_threadpool(storage.get_artifact, artifact_id)
+    if not artifact:
+        return JSONResponse({"error": "A fájl nem található"}, status_code=404)
+    if artifact["content_type"] == "application/vnd.instavm.site-link+json":
         try:
-            target.relative_to(ROOT)
-        except ValueError:
-            self._json(404, {"error": "Nem található"})
-            return
-        if not target.is_file():
-            self._json(404, {"error": "Nem található"})
-            return
-        content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
-        if content_type.startswith("text/") or content_type in ("application/javascript", "application/manifest+json"):
-            content_type += "; charset=utf-8"
-        try:
-            content = target.read_bytes()
-        except OSError:
-            self._json(500, {"error": "A fájl nem olvasható"})
-            return
-        self._send(200, content, content_type)
+            site = json.loads(bytes(artifact["content"]).decode())
+            url = site["url"]
+        except (ValueError, KeyError, UnicodeDecodeError):
+            return JSONResponse({"error": "A Site-hivatkozás sérült"}, status_code=500)
+        if not isinstance(url, str) or not url.startswith("https://"):
+            return JSONResponse({"error": "A Site-hivatkozás érvénytelen"}, status_code=500)
+        return RedirectResponse(
+            url,
+            status_code=302,
+            headers={"Cache-Control": "no-store"},
+        )
+    name = artifact["name"].replace("\r", "").replace("\n", "").replace('"', "")
+    encoded_name = quote_from_bytes(name.encode("utf-8"))
+    fallback_name = name.encode("ascii", "ignore").decode() or "artifact"
+    disposition = f"attachment; filename=\"{fallback_name}\"; filename*=UTF-8''{encoded_name}"
+    return Response(
+        content=bytes(artifact["content"]),
+        media_type=artifact["content_type"],
+        headers={
+            "Content-Disposition": disposition,
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+@app.api_route(
+    "/api/{api_path:path}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+)
+async def unknown_api(api_path: str):
+    return JSONResponse({"error": "Nem található"}, status_code=404)
+
+
+@app.api_route(
+    "/{request_path:path}",
+    methods=["GET", "HEAD"],
+)
+async def serve_static(request_path: str):
+    relative = Path(request_path or "index.html")
+    target = (ROOT / relative).resolve()
+    try:
+        target.relative_to(ROOT)
+    except ValueError:
+        return JSONResponse({"error": "Nem található"}, status_code=404)
+    if not target.is_file():
+        return JSONResponse({"error": "Nem található"}, status_code=404)
+    content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+    if content_type.startswith("text/") or content_type in (
+        "application/javascript",
+        "application/manifest+json",
+    ):
+        content_type += "; charset=utf-8"
+    return FileResponse(
+        target,
+        media_type=content_type,
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 def main():
     port = int(os.environ.get("PORT", "5000"))
-    server = ApplicationServer(("0.0.0.0", port), RequestHandler)
-    agent.resume_pending_jobs()
-    server.serve_forever()
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
 
 
 if __name__ == "__main__":

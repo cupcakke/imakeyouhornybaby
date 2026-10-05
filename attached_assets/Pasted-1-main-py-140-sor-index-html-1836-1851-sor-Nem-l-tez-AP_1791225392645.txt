@@ -1,0 +1,173 @@
+1.  main.py (140. sor) & index.html (1836., 1851. sor) – Nem létező API
+    végpontok (Phantom Endpoints): A frontend a /api/images/generations,
+    /api/images/generate, /api/images/edits, és /api/images/edit végpontokat
+    hívja meg a képgeneráló/szerkesztő felületről, a main.py azonban ezeket a
+    route-okat egyáltalán nem kezeli; minden kérés 404 Nem található hibával tér
+    vissza, így a funkció működésképtelen.
+
+2.  index.html (3486–3489. sor) – Felülírt objektumváltozó miatti halott kód SSE
+    streameléskor: Az event változót a kód újraírja egy objektum literállal
+    (event = { type: "delta", ... }), majd közvetlenül a következő sorban
+    megpróbálja kiolvasni az event.choices[0].finish_reason értéket. Mivel az új
+    objektumon nincs choices mező, a kifejezés mindig undefined, így az
+    event.type = "done" hozzárendelés soha nem tud lefutni.
+
+3.  index.html (183. sor CSS & 2824. sor JS) – Permanensen levágott,
+    kibonthatatlan felhasználói üzenetek: A .user-message-text osztályra a CSS
+    max-height: 7.5em; overflow: hidden; korlátozást alkalmaz. Bár a CSS
+    tartalmazza az .is-expanded és .user-message-expand szabályokat, a
+    JavaScript renderelő ciklus soha nem generálja le a kibontó gombot
+    (.user-message-expand), és nem csatol rá eseménykezelőt sem, így a 7,5
+    sornál hosszabb felhasználói üzenetek csonkítottak maradnak, és a szövegük
+    nem olvasható el teljesen.
+
+4.  index.html (2673. sor) – Hibás autoscroll feltételvizsgálat streaming
+    közben: Az updateStreamingDom elmenti a var wasNear = isNearBottom();
+    állapotot a DOM módosítása előtt, de a görgetés végrehajtásakor
+    (if(isNearBottom()) scrollArea.scrollTop = scrollArea.scrollHeight;) már a
+    DOM bővülése után értékeli újra a függvényt. A megnövekedett scrollHeight
+    miatt az újabb hívás false-t ad, így a görgetés elakad; a wasNear változó
+    használatlan halott kód marad.
+
+5.  index.html (2603. sor) – Extrém/hibás gondolkodási idő megjelenítése
+    oldalújratöltéskor: A formatThinkingTime függvény a (Date.now() -
+    message.thinkingStartedAt) képlettel számol, amennyiben a thinkingEndedAt
+    nincs beállítva. Ha a streamelés megszakad vagy a felhasználó kilép a válasz
+    lezárulta előtt, a thinkingEndedAt értéke mentetlen marad, így újratöltéskor
+    a számláló több száz vagy ezer órás értéket ír ki.
+
+6.  storage.py (28. és 86. sor) – PostgreSQL SQL NULL sztring összefűzési hiba:
+    A create_job úgy hozza létre az ai_chat_jobs rekordot, hogy a
+    response_content, response_reasoning és redirects mezőket nem inicializálja
+    üres értékre. Az append_event során futtatott response_content =
+    response_content || %s || %s és response_reasoning = response_reasoning ||
+    %s műveletek az SQL szabvány szerint NULL-t eredményeznek, ha a mező eredeti
+    értéke NULL, így a válasz és a gondolatmenet perzisztálása teljesen
+    elveszhet. Ugyanez a hiba fennáll a storage.py 138. sorában az add_redirect
+    esetén (redirects = redirects || %s::jsonb).
+
+7.  storage.py (197., 245., 248. sor) – Kezeletlen AttributeError NoneType
+    objektumokon:
+
+      - A finish_job függvényben a
+        connection.execute(...).fetchone()["messages"] eredménye None lehet;
+        ekkor a messages.append(...) futásidejű AttributeError-t dob.
+      - A list_conversations függvényben a job["updated_at"].isoformat() és a
+        conversation["updated_at"].isoformat() hívások AttributeError-ral
+        leállnak, ha az adott rekord updated_at mezője NULL.
+
+8.  agent.py (696–708. sor) – Megszakított feladat újraindítási logikai hibája
+    (State Machine reset): A _run_job ciklusban a require_shell változó
+    hardkódoltan True értékkel indul. Amikor a szerver újraindulása után a
+    resume_pending_jobs() feléleszt egy korábban futó jobot, amely a
+    környezetellenőrzést és az ellenőrzőlistát már régen elvégezte, a rendszer
+    ismét megköveteli a sandbox_execute futtatását, és azonnal RuntimeError("A
+    modell nem indította el a kötelező shell-ellenőrzést.") kivétellel leállítja
+    a feladatot.
+
+9.  agent.py (269–278. sor) – Szótöredék-elvesztés az adathalmaz összefűzésében
+    (_merge_stream_field): Az if piece == existing or existing.endswith(piece):
+    return existing feltétel miatt, ha egy beérkező stream-delta véletlenül
+    megegyezik a már felépített sztring végződésével (például ismétlődő
+    szótagok, azonos karaktercsoportok vagy UUID darabkák esetén), a függvény
+    csendben eldobja a tokent ahelyett, hogy hozzáfűzné.
+
+10. agent.py (352–355. sor) – Lejárt böngésző-munkamenet beragadása
+    (_ensure_browser_session): A függvény a session_id = getattr(client,
+    "_work_browser_session_id", None) hívással ellenőrzi az állapotot, és ha a
+    mező létezik, azonnal visszatér vele anélkül, hogy megvizsgálná az
+    állapotát. A lezártságot, hibát vagy lejáratot vizsgáló ág csak akkor tud
+    lefutni, ha ez az attribútum None, így egy menet közben összeomlott sessiont
+    az ügynök folyamatosan újrapróbál használni.
+
+11. agent.py (396., 410., 426., 460., 485. sor) – Kezeletlen KeyError hiányzó
+    eszközargumentumoknál: A _publish_file (args["path"], args["name"]), a
+    _publish_site (args["directory"], args["port"], args["name"]), valamint a
+    böngészőeszközök (args["url"], args["selector"], args["value"],
+    args["text"], args["y"]) közvetlen szótárindexeléssel érik el az
+    argumentumokat az .get() helyett. Ha az LLM kihagyja valamelyik mezőt a
+    JSON-ben, a kód lekezeletlen KeyError kivételt dob.
+
+12. main.py (198–200. sor) – 500-as hiba plain HTTP Site URL-ek kiszolgálásakor:
+    A _serve_artifact metódusban az if not isinstance(url, str) or not
+    url.startswith("https://"): feltétel kötelezően elvárja a HTTPS protokollt.
+    Amennyiben az InstaVM shares.create hívása sima http:// címmel tér vissza, a
+    szerver belső hibát (500 {"error": "A Site-hivatkozás érvénytelen"}) küld
+    ahelyett, hogy átirányítaná a felhasználót a megosztott weboldalra.
+
+13. index.html (2871. sor) – Nyers belső tároló-URI küldése regeneráláskor: A
+    regenerateMessage során a korábbi üzenet képei a selectedImages tömbbe
+    kerülnek. Amennyiben a kép IndexedDB-ből még nem rehidratált
+    image-storage://<id> azonosítót tartalmaz, a messageContentForModel ezt az
+    URI-t nyers formában küldi el a backendnek, amit a külső LLM API érvénytelen
+    képformátum/URL hibával elutasít.
+
+14. index.html (2434–2457. sor) – Sérült ágaztatási logika (branchChoices): A
+    branchChoices függvény feltétel nélkül hozzáadja a root ágat a választási
+    listához (choices = [root]), függetlenül attól, hogy a root ágon létezik-e
+    elágazás az adott üzenetindexnél. Ha a felhasználó egy másik alágon áll, a
+    choices.indexOf(branch) értéke -1 lesz, ami a selected = 0 fallback miatt
+    hibás léptetést és ágválasztást eredményez.
+
+15. index.html (2470. sor) – Szintaxiskiemelő regex hiba relációs jeleknél és
+    generikusoknál: A highlightCode függvényben található
+    <\/?([A-Za-z][^>\s]*)[^>]*> reguláris kifejezés a kódban előforduló
+    összehasonlításokat és generikus típusokat (pl. vector<int>, a < b && c > d)
+    tévesen HTML nyitó- és zárócímkeként értékeli és tok-tag stílussal látja el.
+
+16. index.html (2555–2575. sor) – Érvénytelen, egymásba ágyazott blokkszintű
+    HTML generálása Markdown konverziókor: A markdown függvény a címsorokat
+    (<h1>...<h3>) és a kódrészleteket (<div class="cb">...</div>) egyaránt <p>
+    tagbe burkolja az output.push(line ? "<p>" + line + "</p>" : "") sorban. Ez
+    a böngészőkben érvénytelen HTML DOM struktúrát (<p><h1>...</h1></p>,
+    <p><div>...</div></p>) eredményez, ami szétzilálja a renderelést.
+
+17. index.html (532. és 3173–3178. sor) – Fájlcsatolási típusblokkolás: A
+    "Files" gombhoz rendelt #fg-files rejtett input
+    accept="image/png,image/jpeg,image/webp,image/gif" attribútummal
+    rendelkezik, és az addSelectedImageFiles függvény explicit módon kiszűri és
+    hibaüzenettel eldobja a nem képtípusú fájlokat, így a felhasználó valójában
+    semmilyen dokumentumot vagy szöveges fájlt nem tud csatolni ezen a gombon
+    keresztül.
+
+18. index.html (3427. sor) & storage.py (77. sor) – Kettős artifact
+    hivatkozásfűzés: A frontend a stream beérkezésekor a
+    streamingMessage.content += "\n\n[" + artifactName + "](/api/artifacts/..."
+    sorral hozzáfűzi a letöltési linket az üzenethez, miközben a háttérben a
+    storage.append_event is beilleszti pontosan ugyanezt a linket a
+    response_content mezőbe. Esemény-újrajátszáskor vagy szinkronizáláskor a
+    letöltési hivatkozás duplán jelenik meg a felületen.
+
+19. index.html (3465–3475. sor) – Eseményazonosítók figyelmen kívül hagyása
+    kliensoldalon: A send() függvényben lévő stream-olvasó kizárólag a data:
+    sorokat dolgozza fel, és teljesen figyelmen kívül hagyja az id: sorokat. Így
+    nem tartja karban a legutolsó esemény sorszámát (last_event_id / cursor),
+    aminek következtében hálózati megszakadás esetén a kliens nem képes a
+    megfelelő pozíciótól folytatni az eseményfolyamot.
+
+20. index.html (3568–3572. sor) – Részlegesen generált szöveg elvesztése hiba
+    esetén: Ha a stream olvasása közben hálózati vagy szerverhiba lép fel, a
+    catch ágban a messages = messages.filter(function(message){ return message
+    !== streamingMessage; }) kifejezés teljesen eltávolítja az éppen generált
+    üzenetet a DOM-ból és a memóriából, azonnal törölve az addig legenerált több
+    bekezdésnyi szöveget és gondolatmenetet.
+
+21. index.html (342. sor) – Duplikált CSS tulajdonság: Az
+    .attachment-popover-option CSS definícióban a border: 0; tulajdonság egymás
+    után kétszer szerepel.
+
+22. agent.py (582–595. sor) – Hiányzó hibakezelési kulcsszó max tokens
+    túllépésre: Az _extended_completion_options_error függvény kizárólag az
+    ismeretlen paraméterekre vizsgálódik (reasoning_effort, extra_body). Ha a
+    távoli API azért utasítja el a hívást, mert a max_tokens: 120000 értéke
+    meghaladja a modell maximális kontextusát, a kód nem ismeri fel a hibát, nem
+    hajtja végre a fallback ágat, és az egész job végzetes hibával leáll.
+
+23. index.html (3328. sor) & storage.py (147. sor) – Üzenetduplikáció
+    feladat-átirányításkor: Menet közbeni átirányításnál (redirect) a backend
+    storage.add_redirect függvénye közvetlenül beilleszti az új felhasználói
+    üzenetet az adatbázisba (ai_chat_conversations.messages), miközben a
+    frontend send() függvénye lokálisan szintén végrehajtja a
+    messages.push({role: "user", content: redirectContent}) és persistCurrent()
+    hívást. A későbbi syncWithBackend() lefutásakor az átirányító utasítás
+    duplikáltan jelenik meg a beszélgetési előzményekben.

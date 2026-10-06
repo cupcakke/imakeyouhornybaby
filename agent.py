@@ -21,6 +21,7 @@ MODEL = "abliterated-model-large-v2"
 IMAGE_MODEL = "abliterated-model"
 SANDBOX_PREFLIGHT_COMMAND = "pwd && ls -la"
 SANDBOX_PREFLIGHT_MARKER = "Server-managed sandbox inspection completed."
+INSTA_VM_EXECUTION_TIMEOUT_SECONDS = 600
 SYSTEM_MESSAGE = """You are a capable digital work agent operating in this conversation's isolated, cloud-hosted InstaVM Linux sandbox. You can run shell commands, read and write files, and operate an isolated cloud browser that can navigate pages, inspect content, click, type, fill forms, scroll, and capture screenshots.
 
 The server automatically runs the initial sandbox inspection before calling the model and adds its result to the tool history. Do not use a tool call to repeat this initial inspection.
@@ -714,14 +715,22 @@ def _execution_failed(result):
 
 
 def _run_command(client, command):
-    result = client.execute(command, language="bash", timeout=3600)
+    result = client.execute(
+        command,
+        language="bash",
+        timeout=INSTA_VM_EXECUTION_TIMEOUT_SECONDS,
+    )
     if _execution_failed(result):
         raise RuntimeError(_text_from_execution(result))
     return {"result": result, "output": _text_from_execution(result)}
 
 
 def _remote_output(client, command, allow_empty=False):
-    result = client.execute(command, language="bash", timeout=3600)
+    result = client.execute(
+        command,
+        language="bash",
+        timeout=INSTA_VM_EXECUTION_TIMEOUT_SECONDS,
+    )
     if _execution_failed(result):
         raise RuntimeError(_text_from_execution(result))
     if isinstance(result, dict):

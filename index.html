@@ -6576,7 +6576,13 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
 
   function timelineHtml(message){
     var steps = Array.isArray(message.timeline) ? message.timeline.slice(-12) : [];
-    if(message.isStreaming && !steps.length) steps.push({type:"thought", text:""});
+    var thinking = typeof message.reasoning_content === "string" ? message.reasoning_content : (typeof message.thinking === "string" ? message.thinking : "");
+    if(thinking){
+      steps = steps.filter(function(step){
+        return !(step && step.type === "thought" && typeof step.text === "string" && step.text && thinking.indexOf(step.text) !== -1);
+      });
+    }
+    if(message.isStreaming && !steps.length && !thinking) steps.push({type:"thought", text:""});
     if(!steps.length) return "";
     return '<div class="cot-timeline">' + steps.map(function(step){
       var icon = step.type === "tool" ? "↗" : (step.type === "done" ? "✓" : "•");
@@ -8404,7 +8410,6 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
             if(typeof event.reasoning_content === "string" && event.reasoning_content){
               streamingMessage.thinking += event.reasoning_content;
               if(!streamingMessage.thinkingManual) streamingMessage.thinkingOpen = true;
-              addTimeline(streamingMessage, "thought", event.reasoning_content);
             }
             if(typeof event.content === "string" && event.content){
               streamingMessage.content += event.content;
@@ -8672,7 +8677,6 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
       if(typeof event.reasoning_content === "string"){
         message.thinking = (message.thinking || "") + event.reasoning_content;
         message.thinkingOpen = true;
-        addTimeline(message, "thought", event.reasoning_content);
       }
       if(typeof event.content === "string"){
         message.content += event.content;

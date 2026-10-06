@@ -19,7 +19,11 @@ import storage
 
 MODEL = "abliterated-model-large-v2"
 IMAGE_MODEL = "abliterated-model"
+SANDBOX_PREFLIGHT_COMMAND = "pwd && ls -la"
+SANDBOX_PREFLIGHT_MARKER = "Server-managed sandbox inspection completed."
 SYSTEM_MESSAGE = """You are a capable digital work agent operating in this conversation's isolated, cloud-hosted InstaVM Linux sandbox. You can run shell commands, read and write files, and operate an isolated cloud browser that can navigate pages, inspect content, click, type, fill forms, scroll, and capture screenshots.
+
+The server automatically runs the initial sandbox inspection before calling the model and adds its result to the tool history. Do not use a tool call to repeat this initial inspection.
 
 For every new request, first inspect the sandbox with sandbox_execute using a harmless command such as `pwd && ls -la`. Next, create a concise ordered checklist with update_checklist before doing substantive work. Keep it current as steps start, finish, or become blocked. For complex tasks, work through the checklist one step at a time. Use the browser tools for websites and browser-based graphical interfaces; use shell and file tools for code and local files. For code or multi-step workflows, run the actual code/process, inspect errors and output, fix failures, and rerun the relevant checks before presenting the result. Do not substitute instructions or a hypothetical description for requested work. Publish requested Sites so they have a working URL. Preserve useful intermediate files in the sandbox, and use the artifact tool for every finished document, spreadsheet, presentation, report, or other downloadable file. Never claim an operation succeeded unless its tool result confirms it. The user may redirect you during a task; follow the latest instruction before starting further work. Reply in the user's language."""
 
@@ -947,19 +951,8 @@ def _consume_stream(
     vm_id,
     agent_messages,
     model,
-    require_shell=False,
-    require_checklist=False,
 ):
-    tool_choice = (
-        {"type": "function", "function": {"name": "sandbox_execute"}}
-        if require_shell
-        else (
-            {"type": "function", "function": {"name": "update_checklist"}}
-            if require_checklist
-            else "auto"
-        )
-    )
-    completion = _completion_stream(client, model, agent_messages, tool_choice)
+    completion = _completion_stream(client, model, agent_messages, "auto")
     text = []
     reasoning = []
     tool_calls = {}
@@ -1083,6 +1076,90 @@ def _repair_dangling_tool_calls(job_id, agent_messages):
     return changed
 
 
+def _run_sandbox_preflight(job, sandbox, vm_id, agent_messages):
+    system_message = next(
+        (
+            message
+            for message in agent_messages
+            if isinstance(message, dict) and message.get("role") == "system"
+        ),
+        None,
+    )
+    if (
+        system_message
+        and isinstance(system_message.get("content"), str)
+        and SANDBOX_PREFLIGHT_MARKER in system_message["content"]
+    ):
+        return
+    if storage.is_cancel_requested(job["job_id"]):
+        raise JobCancelled()
+    call_id = "call_" + uuid.uuid4().hex
+    tool_call = {
+        "id": call_id,
+        "type": "function",
+        "function": {
+            "name": "sandbox_execute",
+            "arguments": json.dumps(
+                {"command": SANDBOX_PREFLIGHT_COMMAND},
+                ensure_ascii=False,
+            ),
+        },
+    }
+    agent_messages.append(
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [tool_call],
+        }
+    )
+    storage.save_agent_messages(job["job_id"], agent_messages)
+    _event(
+        job["job_id"],
+        {
+            "type": "agent_event",
+            "event": {"type": "tool_start", "tool": "sandbox_execute"},
+        },
+    )
+    try:
+        result = _execute_tool(
+            "sandbox_execute",
+            {"command": SANDBOX_PREFLIGHT_COMMAND},
+            job,
+            sandbox,
+            vm_id,
+        )
+        tool_result = {"ok": True, "result": result}
+    except Exception as error:
+        tool_result = {"ok": False, "error": str(error) or type(error).__name__}
+    succeeded = tool_result["ok"]
+    _event(
+        job["job_id"],
+        {
+            "type": "agent_event",
+            "event": {
+                "type": "tool_result",
+                "tool": "sandbox_execute",
+                "ok": succeeded,
+            },
+        },
+    )
+    agent_messages.append(
+        {
+            "role": "tool",
+            "tool_call_id": call_id,
+            "content": json.dumps(tool_result, ensure_ascii=False, default=str),
+        }
+    )
+    if succeeded and system_message is not None:
+        system_message["content"] += "\n\n" + SANDBOX_PREFLIGHT_MARKER
+    storage.save_agent_messages(job["job_id"], agent_messages)
+    if not succeeded:
+        raise RuntimeError(
+            "Az automatikus sandbox-ellenőrzés nem sikerült: "
+            + tool_result["error"]
+        )
+
+
 def _handle_tool_calls(job, client, sandbox, vm_id, agent_messages, assistant_text, reasoning, tool_calls):
     tool_calls = _normalize_tool_calls(tool_calls)
     assistant_message = {"role": "assistant", "content": assistant_text or None, "tool_calls": tool_calls}
@@ -1156,17 +1233,6 @@ def _handle_tool_calls(job, client, sandbox, vm_id, agent_messages, assistant_te
         storage.save_agent_messages(job["job_id"], agent_messages)
 
 
-def _tool_names(tool_calls):
-    names = set()
-    for call in tool_calls:
-        if isinstance(call, dict):
-            function = call.get("function") if isinstance(call.get("function"), dict) else {}
-            name = function.get("name")
-            if name:
-                names.add(name)
-    return names
-
-
 def _run_job(job_id):
     try:
         job = storage.get_job_and_conversation(job_id)
@@ -1202,12 +1268,11 @@ def _run_job(job_id):
         sandbox, vm_id, session_id = _ensure_sandbox(
             job["conversation_id"], job["vm_id"], job["vm_session_id"], job_id
         )
+        _run_sandbox_preflight(job, sandbox, vm_id, agent_messages)
         if storage.is_cancel_requested(job_id):
             raise JobCancelled()
         model_client = _new_model_client()
         last_model = None
-        require_shell = True
-        require_checklist = False
         while True:
             if storage.is_cancel_requested(job_id):
                 raise JobCancelled()
@@ -1230,8 +1295,6 @@ def _run_job(job_id):
                 vm_id,
                 agent_messages,
                 model,
-                require_shell=require_shell,
-                require_checklist=require_checklist,
             )
             if redirected or storage.has_redirects(job_id):
                 if text or reasoning:
@@ -1242,17 +1305,7 @@ def _run_job(job_id):
                 storage.save_agent_messages(job_id, agent_messages)
                 _append_redirects(job_id, agent_messages)
                 continue
-            names = _tool_names(tool_calls)
-            if require_shell and "sandbox_execute" not in names:
-                raise RuntimeError("A modell nem indította el a kötelező shell-ellenőrzést.")
-            if require_checklist and "update_checklist" not in names:
-                raise RuntimeError("A modell nem hozta létre a kötelező feladat-ellenőrzőlistát.")
             if tool_calls:
-                if require_shell:
-                    require_shell = False
-                    require_checklist = "update_checklist" not in names
-                elif require_checklist:
-                    require_checklist = False
                 _handle_tool_calls(
                     job,
                     model_client,

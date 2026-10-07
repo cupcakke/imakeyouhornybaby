@@ -34,6 +34,8 @@ _pool_lock = threading.RLock()
 _pool_condition = threading.Condition(_pool_lock)
 _pool_closing = False
 _pool_acquiring = 0
+_vm_startup_process_lock = threading.Lock()
+_VM_STARTUP_ADVISORY_LOCK_KEY = 0x494E535441564D
 
 _listener_thread = None
 _control_thread = None
@@ -769,6 +771,35 @@ def connect():
             with _pool_condition:
                 _pool_acquiring -= 1
                 _pool_condition.notify_all()
+
+
+@contextmanager
+def instavm_vm_startup_lock():
+    with _vm_startup_process_lock:
+        database_url = os.environ.get("DATABASE_URL")
+        if not database_url:
+            raise RuntimeError("DATABASE_URL is not configured")
+
+        with psycopg.connect(
+            database_url,
+            connect_timeout=10,
+            autocommit=True,
+        ) as connection:
+            connection.execute(
+                "SELECT pg_advisory_lock(%s)",
+                (_VM_STARTUP_ADVISORY_LOCK_KEY,),
+            )
+            try:
+                yield
+            finally:
+                result = connection.execute(
+                    "SELECT pg_advisory_unlock(%s)",
+                    (_VM_STARTUP_ADVISORY_LOCK_KEY,),
+                ).fetchone()
+                if result is None or result[0] is not True:
+                    raise RuntimeError(
+                        "The InstaVM startup lock could not be released"
+                    )
 
 
 def _set_transaction_timeouts(connection):

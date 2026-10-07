@@ -1,5 +1,6 @@
 import asyncio
 import atexit
+import base64
 import json
 import logging
 import math
@@ -9,8 +10,14 @@ import threading
 import time
 import weakref
 from contextlib import contextmanager
+from datetime import date as _date
+from datetime import datetime as _datetime
+from datetime import time as _time_of_day
+from datetime import timedelta as _timedelta
+from decimal import Decimal
 from html import escape
 from urllib.parse import quote
+from uuid import UUID
 
 import psycopg
 from psycopg_pool import ConnectionPool
@@ -35,6 +42,225 @@ _listener_ready = threading.Event()
 
 _job_controls = weakref.WeakValueDictionary()
 _job_controls_lock = threading.RLock()
+
+
+class _EventBusSignal:
+    __slots__ = ("job_id", "event_id")
+
+    def __init__(self, job_id, event_id):
+        self.job_id = None if job_id is None else str(job_id)
+        self.event_id = event_id
+
+    def __repr__(self):
+        return (
+            f"_EventBusSignal(job_id={self.job_id!r}, "
+            f"event_id={self.event_id!r})"
+        )
+
+
+class _EventBusSubscriptionAdapter:
+    _OWN_ATTRIBUTES = frozenset(
+        ("subscription", "job_id", "queue", "_loop", "_lock", "_closed")
+    )
+
+    def __init__(self, subscription, job_id, loop):
+        self.subscription = subscription
+        self.job_id = str(job_id)
+        self.queue = asyncio.Queue(maxsize=1)
+        self._loop = loop
+        self._lock = threading.Lock()
+        self._closed = False
+
+    def __getattr__(self, name):
+        if name in _EventBusSubscriptionAdapter._OWN_ATTRIBUTES:
+            raise AttributeError(name)
+        return getattr(self.subscription, name)
+
+    def close(self):
+        with self._lock:
+            self._closed = True
+
+    def _enqueue(self, signal):
+        with self._lock:
+            if self._closed:
+                return
+
+        queue = self.queue
+
+        if queue.full():
+            try:
+                pending = queue.get_nowait()
+            except asyncio.QueueEmpty:
+                pending = None
+            else:
+                queue.task_done()
+
+            if pending is not None:
+                previous = pending.event_id
+                current = signal.event_id
+                if type(previous) is int and type(current) is int:
+                    merged = max(previous, current)
+                else:
+                    merged = current
+                signal = _EventBusSignal(self.job_id, merged)
+
+        try:
+            queue.put_nowait(signal)
+        except asyncio.QueueFull:
+            return
+
+    def deliver(self, event_id):
+        signal = _EventBusSignal(self.job_id, event_id)
+
+        with self._lock:
+            if self._closed:
+                return
+            loop = self._loop
+
+        if loop is None:
+            self._enqueue(signal)
+            return
+
+        if loop.is_closed():
+            return
+
+        try:
+            loop.call_soon_threadsafe(self._enqueue, signal)
+        except RuntimeError:
+            return
+
+
+def _call_argument(args, kwargs, index, name):
+    if len(args) > index:
+        return args[index]
+    return kwargs.get(name)
+
+
+def _install_event_bus_queue_compatibility():
+    if getattr(event_bus, "_ai_chat_queue_compat_installed", False):
+        return
+
+    original_subscribe = event_bus.subscribe
+    original_unsubscribe = event_bus.unsubscribe
+    original_publish = event_bus.publish
+    original_publish_all = event_bus.publish_all
+
+    adapters = weakref.WeakSet()
+    adapters_lock = threading.Lock()
+
+    def registered(job_id=None):
+        with adapters_lock:
+            if job_id is None:
+                return tuple(adapters)
+            key = str(job_id)
+            return tuple(
+                adapter for adapter in adapters if adapter.job_id == key
+            )
+
+    def subscribe(*args, **kwargs):
+        subscription = original_subscribe(*args, **kwargs)
+
+        if hasattr(subscription, "queue"):
+            return subscription
+
+        job_id = _call_argument(args, kwargs, 0, "job_id")
+        if job_id is None:
+            job_id = getattr(subscription, "job_id", None)
+
+        if job_id is None:
+            return subscription
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        adapter = _EventBusSubscriptionAdapter(subscription, job_id, loop)
+
+        with adapters_lock:
+            adapters.add(adapter)
+
+        return adapter
+
+    def unsubscribe(subscription):
+        if isinstance(subscription, _EventBusSubscriptionAdapter):
+            subscription.close()
+
+            with adapters_lock:
+                adapters.discard(subscription)
+
+            return original_unsubscribe(subscription.subscription)
+
+        return original_unsubscribe(subscription)
+
+    def publish(*args, **kwargs):
+        job_id = _call_argument(args, kwargs, 0, "job_id")
+        event_id = _call_argument(args, kwargs, 1, "event_id")
+
+        try:
+            return original_publish(*args, **kwargs)
+        finally:
+            if job_id is not None:
+                for adapter in registered(job_id):
+                    adapter.deliver(event_id)
+
+    def publish_all(*args, **kwargs):
+        try:
+            return original_publish_all(*args, **kwargs)
+        finally:
+            for adapter in registered():
+                adapter.deliver(0)
+
+    event_bus.subscribe = subscribe
+    event_bus.unsubscribe = unsubscribe
+    event_bus.publish = publish
+    event_bus.publish_all = publish_all
+    event_bus._ai_chat_queue_compat_installed = True
+    event_bus._ai_chat_queue_compat_original_subscribe = original_subscribe
+    event_bus._ai_chat_queue_compat_original_unsubscribe = original_unsubscribe
+    event_bus._ai_chat_queue_compat_original_publish = original_publish
+    event_bus._ai_chat_queue_compat_original_publish_all = original_publish_all
+
+
+_install_event_bus_queue_compatibility()
+
+
+def _json_safe(value):
+    if value is None or isinstance(value, (str, bool, int)):
+        return value
+
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+
+    if isinstance(value, Decimal):
+        if not value.is_finite():
+            return None
+
+        if value == value.to_integral_value():
+            return int(value)
+
+        number = float(value)
+        return number if math.isfinite(number) else str(value)
+
+    if isinstance(value, (_datetime, _date, _time_of_day)):
+        return value.isoformat()
+
+    if isinstance(value, _timedelta):
+        return value.total_seconds()
+
+    if isinstance(value, UUID):
+        return str(value)
+
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return base64.b64encode(bytes(value)).decode("ascii")
+
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_json_safe(item) for item in value]
+
+    return str(value)
 
 
 class _ControlEvent(threading.Event):
@@ -699,7 +925,7 @@ def _artifact_link(payload):
     )
     encoded_id = quote(artifact_id, safe="")
 
-    return f"\n\n<!--citation:1-->"
+    return f"\n\n[{name}](/api/artifacts/{encoded_id})"
 
 
 def append_event(job_id, payload):
@@ -866,8 +1092,8 @@ async def wait_for_events(job_id, after=0, timeout=None):
                 await asyncio.wait_for(subscription.queue.get(), timeout=interval)
             except asyncio.TimeoutError:
                 continue
-            else:
-                subscription.queue.task_done()
+
+            subscription.queue.task_done()
     finally:
         event_bus.unsubscribe(subscription)
 
@@ -1233,18 +1459,13 @@ def list_conversations(conversation_ids):
             """
 
             for row in connection.execute(query, batch).fetchall():
-                updated_at = row["updated_at"]
                 conversation = {
                     "conversation_id": row["conversation_id"],
                     "title": row["title"],
                     "messages": row["messages"],
                     "vm_id": row["vm_id"],
                     "active_job_id": row["active_job_id"],
-                    "updated_at": (
-                        updated_at.isoformat()
-                        if updated_at is not None
-                        else None
-                    ),
+                    "updated_at": row["updated_at"],
                 }
 
                 if row["latest_job_id"] is None:
@@ -1274,7 +1495,7 @@ def list_conversations(conversation_ids):
                     (
                         row["sort_updated_at"],
                         str(row["conversation_id"]),
-                        conversation,
+                        _json_safe(conversation),
                     )
                 )
 

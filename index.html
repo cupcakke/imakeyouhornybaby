@@ -393,7 +393,7 @@ textarea{ border-radius: 0; }
 .thinking summary:before{ content: "›"; display: inline-block; margin-right: 7px; transition: transform .2s; }
 .thinking[open] summary:before{ transform: rotate(90deg); }
 .thinking-text{
-  padding: 0 12px 11px; color: var(--fg3); font-size: 12px; line-height: 1.5;
+  padding: 0 12px 11px; color: var(--fg2); font-size: 13px; line-height: 1.55;
   white-space: pre-wrap; overflow-wrap: anywhere; user-select: text;
 }
 
@@ -934,21 +934,29 @@ textarea{ border-radius: 0; }
 .tok-bool{ color: #d5a8ff; }
 .tok-property{ color: #8ed7ff; }
 
-.cot-head{ display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.cot-clock{
-  margin-left: auto; color: rgba(245,245,247,.38); font-family: ui-monospace, monospace; font-size: 11px;
-  font-variant-numeric: tabular-nums;
+.tool-call-indicator{
+  display: flex; align-items: center; gap: 9px; width: min(100%, 680px);
+  margin: 4px 0 8px; color: var(--fg3); font-size: 12px; line-height: 1.4;
 }
-.cot-timeline{ display: flex; flex-direction: column; gap: 7px; margin: 0 12px 11px; }
-.cot-step{ display: grid; grid-template-columns: 17px 1fr; gap: 7px; align-items: start; color: rgba(245,245,247,.48); font-size: 11px; line-height: 1.45; }
-.cot-step-icon{
-  width: 17px; height: 17px; display: grid; place-items: center; border-radius: 50%;
-  color: #8e9bff; background: rgba(80,90,255,.14); font-size: 10px;
+.tool-call-icon{
+  display: grid; place-items: center; flex: 0 0 22px; width: 22px; height: 22px;
+  border: 1px solid rgba(255,207,112,.2); border-radius: 7px;
+  color: #ffcf70; background: rgba(255,207,112,.08);
 }
-.cot-step.tool .cot-step-icon{ color: #ffcf70; background: rgba(255,207,112,.12); }
-.cot-step.done .cot-step-icon{ color: #62ffbf; background: rgba(98,255,191,.12); }
-.cot-step-text{ min-width: 0; overflow-wrap: anywhere; }
-.cot-step.done .cot-step-text{ color: rgba(98,255,191,.68); }
+.tool-call-icon svg{
+  width: 13px; height: 13px; fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round;
+}
+.tool-call-label{ min-width: 0; overflow-wrap: anywhere; }
+.tool-call-spinner{
+  flex: 0 0 13px; width: 13px; height: 13px; margin-left: auto;
+  border: 1.5px solid rgba(245,245,247,.17); border-top-color: #ffcf70;
+  border-radius: 50%; animation: tool-call-spin .8s linear infinite;
+}
+@keyframes tool-call-spin{ to{ transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce){
+  .tool-call-spinner{ animation-duration: 2.4s; }
+}
 
 .branch-nav{
   display: flex; align-items: center; gap: 7px; width: fit-content; margin: 2px 0 8px;
@@ -965,6 +973,19 @@ textarea{ border-radius: 0; }
 .msg-actions{ display: flex; gap: 5px; margin: 2px 4px 0; opacity: 0; transition: opacity .2s; }
 .work-message-actions{ opacity: .78; }
 .msg-group:hover .msg-actions, .msg-group:focus-within .msg-actions{ opacity: 1; }
+.msg-icon-button{
+  display: grid; place-items: center; width: 30px; height: 30px; padding: 0;
+  border: 1px solid transparent; border-radius: 9px; color: var(--fg3);
+  background: transparent; cursor: pointer; transition: color .16s, background .16s, border-color .16s;
+}
+.msg-icon-button svg{
+  width: 16px; height: 16px; fill: none; stroke: currentColor;
+  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
+.msg-icon-button:hover, .msg-icon-button:focus-visible{
+  color: var(--fg); background: rgba(255,255,255,.07); border-color: var(--sep); outline: none;
+}
+.msg-icon-button.is-copied{ color: #62ffbf; }
 .msg-edit{
   border: 0; background: transparent; color: var(--fg3); font-size: 11px; padding: 2px 4px;
 }
@@ -6276,7 +6297,6 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
   var STORAGE_KEY = "chat_history_v1";
    var branches = [];
    var activeBranchId = null;
-   var thinkingTicker = null;
    var streamRenderTimer = null;
 
   function escapeHtml(value){
@@ -6562,72 +6582,11 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
     }).join("") + '</div>';
   }
 
-  function formatThinkingTime(message){
-    if(!message || !message.thinkingStartedAt) return "0.0s";
-    return ((Math.max(0, (message.thinkingEndedAt || Date.now()) - message.thinkingStartedAt)) / 1000).toFixed(1) + "s";
-  }
-
   function renderTextFiles(files, messageIndex){
     if(!files || !files.length) return "";
     return files.map(function(file, index){
       return '<div class="user-text-file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h8"/></svg><span class="user-text-file-name">' + escapeHtml(file.name) + '</span><button class="user-text-file-download" type="button" data-text-file-message="' + messageIndex + '" data-text-file-index="' + index + '">Letöltés</button></div>';
     }).join("");
-  }
-
-  function timelineHtml(message){
-    var steps = Array.isArray(message.timeline) ? message.timeline.slice(-12) : [];
-    var thinking = typeof message.reasoning_content === "string" ? message.reasoning_content : (typeof message.thinking === "string" ? message.thinking : "");
-    if(thinking){
-      steps = steps.filter(function(step){
-        return !(step && step.type === "thought" && typeof step.text === "string" && step.text && thinking.indexOf(step.text) !== -1);
-      });
-    }
-    if(message.isStreaming && !steps.length && !thinking) steps.push({type:"thought", text:""});
-    if(!steps.length) return "";
-    return '<div class="cot-timeline">' + steps.map(function(step){
-      var icon = step.type === "tool" ? "↗" : (step.type === "done" ? "✓" : "•");
-      return '<div class="cot-step ' + escapeAttr(step.type || "thought") + '"><span class="cot-step-icon">' + icon + '</span><span class="cot-step-text">' + escapeHtml(step.text || "") + '</span></div>';
-    }).join("") + '</div>';
-  }
-
-  function addTimeline(message, type, text){
-    if(!message.timeline) message.timeline = [];
-    var last = message.timeline[message.timeline.length - 1];
-    if(type === "thought" && last && !last.checklistId && last.type === "thought" && last.text.length < 240 && String(text).indexOf("\n") === -1){
-      last.text += text;
-      return;
-    }
-    var value = String(text || "");
-    message.timeline.push({type:type, text:value});
-    if(message.timeline.length > 16) message.timeline.shift();
-  }
-
-  function updateChecklistTimeline(message, steps){
-    if(!Array.isArray(steps)) return;
-    if(!message.timeline) message.timeline = [];
-    var ids = {};
-    steps.forEach(function(step){
-      if(!step || !step.id) return;
-      var id = String(step.id);
-      ids[id] = true;
-      var status = String(step.status || "pending");
-      var labels = {
-        pending:"Tervezve: ",
-        in_progress:"Folyamatban: ",
-        completed:"Kész: ",
-        blocked:"Akadály: "
-      };
-      var type = status === "completed" ? "done" : (status === "blocked" ? "thought" : "thought");
-      var text = (labels[status] || "Lépés: ") + String(step.title || id);
-      var existing = message.timeline.find(function(item){ return item.checklistId === id; });
-      if(existing){
-        existing.type = type;
-        existing.text = text;
-      }else{
-        message.timeline.push({type:type, text:text, checklistId:id});
-      }
-    });
-    message.timeline = message.timeline.filter(function(item){ return !item.checklistId || ids[item.checklistId]; }).slice(-16);
   }
 
   function toolDisplayName(name){
@@ -6650,8 +6609,59 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
     return labels[name] || name || "művelet";
   }
 
+  function toolNameFromCall(value){
+    if(typeof value === "string") return value;
+    if(!value || typeof value !== "object") return "";
+    if(value.function && typeof value.function.name === "string") return value.function.name;
+    if(typeof value.name === "string") return value.name;
+    if(typeof value.tool === "string") return value.tool;
+    return "";
+  }
+
+  function setToolActivity(message, tool){
+    if(!message) return;
+    message.activeToolCall = {name:String(tool || "művelet")};
+  }
+
+  function clearToolActivity(message, tool){
+    if(!message || !message.activeToolCall) return;
+    var activeName = String(message.activeToolCall.name || "");
+    if(!tool || !activeName || activeName === String(tool)) message.activeToolCall = null;
+  }
+
+  function renderToolActivity(message){
+    if(!message || !message.activeToolCall) return "";
+    var name = String(message.activeToolCall.name || "");
+    var label = name && name !== "művelet" ? toolDisplayName(name) : "eszköz";
+    return '<div class="tool-call-indicator" role="status" aria-live="polite"><span class="tool-call-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"></path></svg></span><span class="tool-call-label">Eszközhívás: ' + escapeHtml(label) + '</span><span class="tool-call-spinner" aria-hidden="true"></span></div>';
+  }
+
   function codeText(block){
     return Array.prototype.map.call(block.querySelectorAll(".cb-source"), function(line){ return line.textContent || ""; }).join("\n");
+  }
+
+  function writeClipboard(text){
+    if(navigator.clipboard && typeof navigator.clipboard.writeText === "function"){
+      try{ return Promise.resolve(navigator.clipboard.writeText(text)); }
+      catch(error){ return Promise.reject(error); }
+    }
+    return new Promise(function(resolve, reject){
+      var field = document.createElement("textarea");
+      field.value = text;
+      field.setAttribute("readonly", "");
+      field.style.position = "fixed";
+      field.style.left = "-9999px";
+      field.style.top = "0";
+      document.body.appendChild(field);
+      field.focus();
+      field.select();
+      field.setSelectionRange(0, field.value.length);
+      var copied = false;
+      try{ copied = document.execCommand("copy"); }catch(error){}
+      field.remove();
+      if(copied) resolve();
+      else reject(new Error("A másolás nem sikerült."));
+    });
   }
 
   function downloadText(name, text, type){
@@ -6697,6 +6707,30 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
         var copied = function(){ button.textContent = "Másolva ✓"; button.classList.add("is-copied"); setTimeout(function(){ button.textContent = "Másolás"; button.classList.remove("is-copied"); }, 1300); };
         if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(codeText(block)).then(copied).catch(function(){ toast("Másolás sikertelen", "err"); });
         else toast("Másolás nem támogatott", "err");
+      });
+    });
+    messageList.querySelectorAll(".msg-copy").forEach(function(button){
+      if(button._bound) return;
+      button._bound = true;
+      button.addEventListener("click", function(){
+        var index = parseInt(button.getAttribute("data-copy-index"), 10);
+        var message = messages[index];
+        if(!message || message.role !== "assistant") return;
+        var text = contentToDisplay(splitAssistantMessage(message).content).text;
+        if(!text) return;
+        var originalIcon = button.innerHTML;
+        writeClipboard(text).then(function(){
+          button.classList.add("is-copied");
+          button.setAttribute("aria-label", "Másolva");
+          button.title = "Másolva";
+          button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"></path></svg>';
+          window.setTimeout(function(){
+            button.classList.remove("is-copied");
+            button.setAttribute("aria-label", "Válasz másolása");
+            button.title = "Válasz másolása";
+            button.innerHTML = originalIcon;
+          }, 1300);
+        }).catch(function(){ toast("A válasz másolása nem sikerült", "err"); });
       });
     });
     messageList.querySelectorAll(".cb-wrap").forEach(function(button){
@@ -6818,14 +6852,15 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
         return '<div class="msg-group u" role="listitem">' + renderMessageImages(display.images, messageIndex, false) + renderTextFiles(display.textFiles, messageIndex) + textBubble + '<div class="msg-actions"><button type="button" class="msg-edit" data-edit-index="' + messageIndex + '">Szerkesztés</button></div>' + branchNav + '</div>';
       }
       var thinking = parsed.thinking;
-      var showThinking = !!thinking || !!message.isStreaming || (Array.isArray(message.timeline) && message.timeline.length);
-      var workLabel = message.workTask ? (message.isStreaming ? "Work folyamatban…" : "Work eredménye") : (message.isStreaming ? "Gondolkodás folyamatban…" : "Gondolkodás");
-      var thinkingHtml = showThinking ? '<details class="thinking lg cot-glass" data-thinking-index="' + messageIndex + '"' + (message.thinkingOpen ? ' open' : '') + '><summary><span class="cot-head"><span>' + workLabel + '</span><span class="cot-clock">' + formatThinkingTime(message) + '</span></span></summary><div class="thinking-text">' + (thinking ? markdown(thinking) : (message.isStreaming ? '<span>Work-feladat folyamatban…</span>' : '')) + timelineHtml(message) + '</div></details>' : '';
+      var thinkingHtml = thinking ? '<details class="thinking lg cot-glass" data-thinking-index="' + messageIndex + '"' + (message.thinkingOpen ? ' open' : '') + '><summary>Reasoning</summary><div class="thinking-text">' + escapeHtml(thinking) + '</div></details>' : '';
+      var toolActivity = renderToolActivity(message);
       var pending = message.imageRequestPending ? '<div class="image-request-pending">' + (message.imageOperation === "edit" ? "A kép szerkesztése folyamatban…" : "A kép létrehozása folyamatban…") + '</div>' : '';
       var body = message.isError ? '<div class="err-bbl">' + markdown(display.text) + '</div>' : '<div class="ai-bubble md">' + markdown(display.text) + '</div>';
       var hasEarlierUser = messages.slice(0, messageIndex).some(function(item){ return item.role === "user"; });
-      var regenerate = !message.isStreaming && hasEarlierUser ? '<div class="msg-actions work-message-actions"><button type="button" class="msg-regenerate" data-regenerate-index="' + messageIndex + '">Újragenerálás</button></div>' : '';
-      return '<div class="msg-group a" role="listitem">' + thinkingHtml + pending + body + renderMessageImages(display.images, messageIndex, !!message.generatedImagePresentation) + regenerate + branchNav + '</div>';
+      var copyButton = !message.isStreaming && display.text.trim() ? '<button type="button" class="msg-icon-button msg-copy" data-copy-index="' + messageIndex + '" aria-label="Válasz másolása" title="Válasz másolása"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg></button>' : '';
+      var regenerateButton = !message.isStreaming && hasEarlierUser ? '<button type="button" class="msg-icon-button msg-regenerate" data-regenerate-index="' + messageIndex + '" aria-label="Újragenerálás" title="Újragenerálás"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5"></path><path d="M19 12a7 7 0 0 0-12-4L5 10"></path><path d="M4 17v-5h5"></path><path d="M5 12a7 7 0 0 0 12 4l2-2"></path></svg></button>' : '';
+      var actions = copyButton || regenerateButton ? '<div class="msg-actions work-message-actions">' + copyButton + regenerateButton + '</div>' : '';
+      return '<div class="msg-group a" role="listitem">' + thinkingHtml + toolActivity + pending + body + renderMessageImages(display.images, messageIndex, !!message.generatedImagePresentation) + actions + branchNav + '</div>';
     }).join("");
     bindRichContent();
     updateScrollButton();
@@ -8142,7 +8177,7 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
         abortController = null;
         activeChatJobId = null;
       }
-      stopThinkingClock();
+      stopStreamRenderTimer();
       setBusy(false);
       messages = [];
       currentId = null;
@@ -8158,31 +8193,26 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
     toast("Törölve", "ok");
   }
 
-   function startThinkingClock(message){
-     if(!message.thinkingStartedAt) message.thinkingStartedAt = Date.now();
-     if(thinkingTicker) clearInterval(thinkingTicker);
-     thinkingTicker = setInterval(function(){
-       if(!message.isStreaming) return;
-       var index = messages.indexOf(message);
-       var clock = index >= 0 ? messageList.querySelector('.thinking[data-thinking-index="' + index + '"] .cot-clock') : null;
-       if(clock) clock.textContent = formatThinkingTime(message);
-     }, 250);
-   }
-
    function updateStreamingDom(message){
-     var wasNear = isNearBottom();
      var index = messages.indexOf(message);
      if(index < 0) return;
      var group = messageList.querySelectorAll(".msg-group")[index];
      if(!group){ render(); return; }
      var parsed = splitAssistantMessage({content:message.content, reasoning_content:message.thinking});
      var details = group.querySelector(".thinking");
+      if(!!parsed.thinking !== !!details){ render(); return; }
+      var toolActivityHtml = renderToolActivity(message);
+      var toolActivity = group.querySelector(".tool-call-indicator");
+      if(!!toolActivityHtml !== !!toolActivity){ render(); return; }
+      if(toolActivityHtml && toolActivity){
+        var toolActivityContainer = document.createElement("div");
+        toolActivityContainer.innerHTML = toolActivityHtml;
+        toolActivity.replaceWith(toolActivityContainer.firstElementChild);
+      }
      if(details){
        var thinkingText = details.querySelector(".thinking-text");
-       if(thinkingText) thinkingText.innerHTML = (parsed.thinking ? markdown(parsed.thinking) : (message.isStreaming ? "<span>A modell gondolkodik…</span>" : "")) + timelineHtml(message);
+        if(thinkingText) thinkingText.textContent = parsed.thinking;
        if(!message.thinkingManual) details.open = !!message.thinkingOpen;
-       var clock = details.querySelector(".cot-clock");
-       if(clock) clock.textContent = formatThinkingTime(message);
      }
      var body = group.querySelector(".ai-bubble, .err-bbl");
      if(body) body.innerHTML = markdown(contentToDisplay(parsed.content).text);
@@ -8198,12 +8228,10 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
      }, 120);
    }
 
-   function stopThinkingClock(){
-     if(thinkingTicker) clearInterval(thinkingTicker);
-     thinkingTicker = null;
-     if(streamRenderTimer) clearTimeout(streamRenderTimer);
-     streamRenderTimer = null;
-   }
+    function stopStreamRenderTimer(){
+      if(streamRenderTimer) clearTimeout(streamRenderTimer);
+      streamRenderTimer = null;
+    }
 
 
   async function stopActiveBackendJob(){
@@ -8274,11 +8302,10 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
     selectedImages = [];
     selectedTextFiles = [];
     updateImgStrip();
-    var streamingMessage = {role:"assistant", content:"", thinking:"", isStreaming:true, thinkingOpen:true, thinkingManual:false, timeline:[], workTask:true};
+    var streamingMessage = {role:"assistant", content:"", thinking:"", isStreaming:true, thinkingOpen:true, thinkingManual:false};
     messages.push(streamingMessage);
     scheduleStreamRender(streamingMessage);
     setBusy(true);
-    startThinkingClock(streamingMessage);
     pendingChatStopRequested = false;
     abortController = new AbortController();
     var requestConversationId = conversationId || currentId;
@@ -8340,58 +8367,34 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
                conversationId = event.conversation_id;
                persistCurrent();
              }
-              if(event.work_task) streamingMessage.workTask = true;
              if(!event.job_id) return;
             if(requestToken === abortController) activeChatJobId = event.job_id;
             return;
           }
-          if(event.type === "route"){
-             addTimeline(streamingMessage, "thought", event.intent ? "Terv: " + event.intent : "A Work-feladat terve frissült");
-            scheduleStreamRender(streamingMessage);
-            return;
-          }
+           if(event.type === "route") return;
           if(event.type === "agent_event"){
             var agentEvent = event.event || {};
             var eventType = agentEvent.type || "agent_event";
-            var label = "Agent esemény";
-            var timelineType = "thought";
             if(eventType === "tool_start"){
-              label = "Eszköz: " + toolDisplayName(agentEvent.tool);
-              timelineType = "tool";
-            }else if(eventType === "tool_result"){
-              label = (agentEvent.ok === false ? "Eszközhiba" : "Eszköz kész") + (agentEvent.tool ? ": " + toolDisplayName(agentEvent.tool) : "");
-              timelineType = agentEvent.ok === false ? "thought" : "done";
-            }else if(eventType === "checklist"){
-              updateChecklistTimeline(streamingMessage, agentEvent.steps);
-              scheduleStreamRender(streamingMessage);
+               setToolActivity(streamingMessage, agentEvent.tool);
+               persistCurrent();
+               render();
               return;
-            }else if(eventType === "model_start"){
-              label = "Modell: " + (agentEvent.model || "specialista");
-            }else if(eventType === "model_output"){
-              label = "Modellválasz feldolgozva";
-            }else if(eventType.indexOf("subagent_") === 0){
-              label = "Subagent: " + eventType.slice(9).replace(/_/g," ");
-              timelineType = eventType.indexOf("tool") !== -1 ? "tool" : (eventType === "subagent_done" ? "done" : "thought");
-            }else if(eventType === "plan_replaced" || eventType === "plan_mutated"){
-              label = "A terv frissült";
-            }else if(eventType === "verification_failed"){
-              label = "Ellenőrzés sikertelen, folytatás szükséges";
-            }else if(eventType === "progress"){
-              var status = agentEvent.status || "in_progress";
-              var stepPrefix = status === "completed" ? "Kész: " : (status === "blocked" ? "Akadály: " : (status === "pending" ? "Tervezve: " : "Folyamatban: "));
-              label = stepPrefix + (agentEvent.step_id || "Work-feladat");
-              timelineType = status === "completed" ? "done" : "thought";
-            }else if(eventType === "artifact" && agentEvent.artifact){
+             }
+             if(eventType === "tool_result"){
+               clearToolActivity(streamingMessage, agentEvent.tool);
+               persistCurrent();
+               render();
+               return;
+             }
+             if(eventType === "artifact" && agentEvent.artifact){
               var artifact = agentEvent.artifact;
-              label = "Fájl elkészült: " + (artifact.name || artifact.artifact_id || "artifact");
-              timelineType = "done";
               if(artifact.artifact_id){
                 var artifactName = String(artifact.name || "Letöltés").replace(/[\[\]]/g, "");
                 streamingMessage.content += "\n\n[" + artifactName + "](/api/artifacts/" + encodeURIComponent(artifact.artifact_id) + ")";
               }
+               scheduleStreamRender(streamingMessage);
             }
-            addTimeline(streamingMessage, timelineType, label);
-            scheduleStreamRender(streamingMessage);
             return;
           }
           if(event.choices && event.choices[0] && event.choices[0].delta){
@@ -8400,12 +8403,13 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
               type: "delta",
               content: typeof delta.content === "string" ? delta.content : undefined,
               reasoning_content: typeof delta.reasoning_content === "string" ? delta.reasoning_content : (typeof delta.reasoning === "string" ? delta.reasoning : undefined),
-              tool_call: delta.tool_call,
-              tool: delta.tool
+               tool_call: delta.tool_call || (Array.isArray(delta.tool_calls) ? delta.tool_calls[0] : undefined),
+               tool: delta.tool,
+               finish_reason: event.choices[0].finish_reason
             };
-            if(event.choices && event.choices[0].finish_reason) event.type = "done";
+             if(event.finish_reason) event.type = "done";
           }
-          if(event.type === "delta" || (!event.type && (event.content || event.reasoning_content))){
+          if(event.type === "delta" || (!event.type && (event.content || event.reasoning_content || event.tool_call || event.tool))){
             receivedAny = true;
             if(typeof event.reasoning_content === "string" && event.reasoning_content){
               streamingMessage.thinking += event.reasoning_content;
@@ -8422,12 +8426,13 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
               }
             }
             if(event.tool_call || event.tool){
-              addTimeline(streamingMessage, "tool", "Eszközhívás folyamatban");
+              setToolActivity(streamingMessage, toolNameFromCall(event.tool_call || event.tool));
             }
             scheduleStreamRender(streamingMessage);
           }else if(event.type === "error"){
             throw new Error(event.message || "A modell streamelése megszakadt.");
           }else if(event.type === "done"){
+            clearToolActivity(streamingMessage);
             streamingMessage.thinkingEndedAt = streamingMessage.thinkingEndedAt || Date.now();
             streamDone = true;
           }
@@ -8460,6 +8465,7 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
       }
       streamingMessage.thinkingEndedAt = streamingMessage.thinkingEndedAt || Date.now();
       streamingMessage.isStreaming = false;
+      clearToolActivity(streamingMessage);
       if(requestToken === abortController && requestBranchId === activeBranchId){
         render();
         persistCurrent();
@@ -8471,6 +8477,7 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
       var stillActive = (requestToken === abortController) && (requestBranchId === activeBranchId);
       streamingMessage.isStreaming = false;
       streamingMessage.thinkingEndedAt = streamingMessage.thinkingEndedAt || Date.now();
+      clearToolActivity(streamingMessage);
       if(!stillActive){
         syncActiveBranch();
         persistCurrent();
@@ -8496,7 +8503,7 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
         try{ reader.releaseLock(); }catch(e){}
       }
       if(requestToken === abortController){
-        stopThinkingClock();
+        stopStreamRenderTimer();
         abortController = null;
         activeChatJobId = null;
         pendingChatStopRequested = false;
@@ -8642,38 +8649,35 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
   function updateResumedMessage(message, event){
     if(event.type === "meta"){
       if(event.job_id) activeChatJobId = event.job_id;
+      return;
     }else if(event.type === "route"){
-      addTimeline(message, "thought", event.intent ? "Terv: " + event.intent : "A Work-feladat terve frissült");
+      return;
     }else if(event.type === "agent_event"){
       var agentEvent = event.event || {};
       var type = agentEvent.type || "agent_event";
-      var label = "Work-feladat";
-      var kind = "thought";
-      var checklistUpdated = false;
-      if(type === "tool_start"){ label = "Eszköz: " + toolDisplayName(agentEvent.tool); kind = "tool"; }
-      else if(type === "tool_result"){ label = (agentEvent.ok === false ? "Eszközhiba: " : "Eszköz kész: ") + toolDisplayName(agentEvent.tool); kind = agentEvent.ok === false ? "thought" : "done"; }
-      else if(type === "checklist"){ updateChecklistTimeline(message, agentEvent.steps); checklistUpdated = true; }
-      else if(type === "model_start"){ label = "Modell: " + (agentEvent.model || "specialista"); }
-      else if(type === "model_output"){ label = "A modellválasz elkészült"; }
-      else if(type === "subagent_done"){ label = "Részfeladat elkészült"; kind = "done"; }
-      else if(type === "progress"){
-        var status = agentEvent.status || "in_progress";
-        var stepPrefix = status === "completed" ? "Kész: " : (status === "blocked" ? "Akadály: " : (status === "pending" ? "Tervezve: " : "Folyamatban: "));
-        label = stepPrefix + (agentEvent.step_id || "Work-feladat");
-        kind = status === "completed" ? "done" : "thought";
+      if(type === "tool_start"){
+        setToolActivity(message, agentEvent.tool);
+        persistCurrent();
+        render();
+        return;
       }
-      else if(type === "artifact" && agentEvent.artifact){
+      if(type === "tool_result"){
+        clearToolActivity(message, agentEvent.tool);
+        persistCurrent();
+        render();
+        return;
+      }
+      if(type === "artifact" && agentEvent.artifact){
         var artifact = agentEvent.artifact;
-        label = "Elkészült: " + (artifact.name || "artifact");
-        kind = "done";
         if(artifact.artifact_id){
           var name = String(artifact.name || "Letöltés").replace(/[\[\]]/g, "");
           var link = "[" + name + "](/api/artifacts/" + encodeURIComponent(artifact.artifact_id) + ")";
-          if(message.content.indexOf(link) === -1) message.content += "\n\n" + link;
+          if(String(message.content || "").indexOf(link) === -1) message.content += "\n\n" + link;
         }
+        scheduleStreamRender(message);
       }
-      if(!checklistUpdated) addTimeline(message, kind, label);
-    }else if(event.type === "delta" || (!event.type && (event.content || event.reasoning_content))){
+      return;
+    }else if(event.type === "delta" || (!event.type && (event.content || event.reasoning_content || event.tool_call || event.tool))){
       if(typeof event.reasoning_content === "string"){
         message.thinking = (message.thinking || "") + event.reasoning_content;
         message.thinkingOpen = true;
@@ -8683,15 +8687,19 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
         message.thinkingEndedAt = message.thinkingEndedAt || Date.now();
         message.thinkingOpen = false;
       }
+      if(event.tool_call || event.tool) setToolActivity(message, toolNameFromCall(event.tool_call || event.tool));
     }else if(event.type === "done"){
       message.isStreaming = false;
       message.thinkingEndedAt = message.thinkingEndedAt || Date.now();
-      addTimeline(message, "done", event.cancelled ? "A Work-feladat megszakítva" : "Work-feladat kész");
+      clearToolActivity(message);
     }else if(event.type === "error"){
       message.isStreaming = false;
       message.isError = true;
       message.content = message.content || ("Hiba: " + (event.message || "A Work-feladat hibával leállt."));
       message.thinkingEndedAt = message.thinkingEndedAt || Date.now();
+      clearToolActivity(message);
+    }else{
+      return;
     }
     scheduleStreamRender(message);
   }
@@ -8714,7 +8722,7 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
         message.isStreaming = false;
         activeChatJobId = null;
         abortController = null;
-        stopThinkingClock();
+        stopStreamRenderTimer();
         setBusy(false);
         render();
         persistCurrent();
@@ -8761,21 +8769,17 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
     }
     var message = messages.length && messages[messages.length - 1].role === "assistant" ? messages[messages.length - 1] : null;
     if(!message){
-      message = {role:"assistant", content:"", thinking:"", isStreaming:true, thinkingOpen:true, timeline:[], workTask:true};
+      message = {role:"assistant", content:"", thinking:"", isStreaming:true, thinkingOpen:true};
       messages.push(message);
     }
     message.content = job.response_content || message.content || "";
     message.thinking = job.response_reasoning || message.thinking || "";
     message.isStreaming = true;
-    message.workTask = true;
     message.thinkingOpen = true;
-    message.timeline = message.timeline || [];
-    if(job.progress) addTimeline(message, "tool", job.progress);
     activeChatJobId = job.job_id;
     if(abortController) abortController.abort();
     abortController = new AbortController();
     setBusy(true);
-    startThinkingClock(message);
     render();
     persistCurrent();
     resumeWorkStream(job, message, abortController);
@@ -8806,14 +8810,13 @@ const GlassSlider = ({ value, onChange, min = 0, max = 100 }) => {
         }
         var answer = entry.messages.length - 1 > lastUserIndex && entry.messages[entry.messages.length - 1].role === "assistant" ? entry.messages[entry.messages.length - 1] : null;
         if(job.status === "running" && !answer){
-          answer = {role:"assistant", content:"", thinking:"", isStreaming:true, thinkingOpen:true, timeline:[], workTask:true};
+          answer = {role:"assistant", content:"", thinking:"", isStreaming:true, thinkingOpen:true};
           entry.messages.push(answer);
         }
         if(answer){
           answer.content = job.response_content || answer.content || "";
           answer.thinking = job.response_reasoning || answer.thinking || "";
           answer.isStreaming = job.status === "running";
-          answer.workTask = true;
           if(job.status === "failed"){
             answer.isError = true;
             answer.content = answer.content || ("Hiba: " + (job.error || "A Work-feladat hibával leállt."));

@@ -1,0 +1,549 @@
+Having read and analyzed every single line, variable, selector, shader pass, and gesture listener of your application (from the WebGL2 multi-pass fragment shaders and SVG displacement filters down to the WKWebView layout bridges and SSE streaming loops), here is a comprehensive architectural and UX blueprint to transform this app into a **flawless, indistinguishable, state-of-the-art native iOS/macOS experience**.
+
+---
+
+### The Executive Diagnosis: What Breaks the Native Illusion Right Now
+
+Your codebase already has incredible ambition: WebGL2 refraction, spring physics math (`GlassKit.Spring`), an iOS layout bridge (`layoutBridge`, `inputBridge`, `hapticBridge`), branching dialogue trees, and offline IndexedDB caching. However, several critical architectural friction points and "uncanny valley" web artifacts immediately betray its web nature:
+
+1. **The Three-Way Glass War**: You have **three conflicting glass systems** running simultaneously:
+   - *System A*: CSS `backdrop-filter: blur(...)` and gradients.
+   - *System B*: The fullscreen WebGL2 canvas (`MultiPassRenderer` in Script 9), which samples DOM rects only once every 600ms (`t - this._lastCollect >= 600`) capped at 48 shapes (`MAX_SHAPES = 48`). When a user scrolls, the WebGL refraction shapes lag behind the text by up to half a second, jittering and breaking.
+   - *System C*: Script 4 mounts a separate React 18 `createRoot` inside *every single* `.lg, .bubble, .hcard` via `MutationObserver`, compiling SVG displacement filters with runtime Babel in the browser. Meanwhile, your CSS explicitly forces `.glass-host, .lg { background: transparent !important; backdrop-filter: none !important; }`, neutralizing these very filters.
+2. **Missing Native Top Chrome (UINavigationBar)**: `#content` has no header bar at all. Chat bubbles scroll straight into the top notch / Dynamic Island area (`padding: calc(12px + var(--sat))`), text collides with white status bar icons, and there is no on-screen button to open history, view the model, or start a new chat. Users must know to swipe from an invisible 40px left-edge zone or hit `Cmd+K`.
+3. **Transparent Input Collision**: `#ib-wrap` and `.ib-inner` have `background: transparent`. As messages scroll down, they pass directly *underneath* the input textarea and send button, causing message text and input text to bleed together illegibly.
+4. **Broken User Message Expansion**: CSS defines `.user-message-text { max-height: 7.5em; overflow: hidden; }` and `.user-message-expand`, but `render()` in Script 7 *never creates* the expand button. Any user prompt longer than 7 lines is permanently truncated with zero way to read it.
+5. **Streaming DOM Destruction**: Every 120ms (`scheduleStreamRender`), `body.innerHTML = markdown(...)` wipes out and rebuilds the active bubble, recalculating syntax highlighting for the entire message. This destroys active text selections, drops frames, and causes visual micro-stutters during streaming.
+6. **Mobile Touch & Gesture Invisibility**:
+   - History cards only listen to `contextmenu` (right-click). Because `-webkit-touch-callout: none` is set globally, mobile long-press does not trigger it.
+   - User message edit buttons (`.msg-actions`) rely on `:hover`, rendering "Szerkesztés" completely inaccessible on touchscreens.
+   - Swiping the sidebar does not dynamically ramp the backdrop opacity or check release velocity; a quick thumb flick under 80px snaps it shut instead of opening.
+   - Lightbox has no 1-finger swipe-to-dismiss.
+   - Scrolling down on the chat does not dismiss the software keyboard (`interactiveKeyboardDismiss`).
+
+---
+
+# The Master Blueprint: How to Achieve 100% Native Feel
+
+---
+
+## 1. Unified Glass Architecture: Native CoreAnimation Compositing
+
+### Eliminate the Runtime Babel & Multi-Root Overhead
+- **The Problem**: Loading unpkg React 18, ReactDOM, and Babel Standalone (over 2.8 MB) to compile 95 KB of JSX at runtime on a mobile CPU drains battery, causes thermal throttling, and blocks the main thread at launch. Spawning hundreds of React roots via `MutationObserver` creates massive memory churn.
+- **The Native Solution**: 
+  - Standardize on hardware-accelerated **native CSS backdrop filters** with CoreAnimation layer promotion (`will-change: transform`, `transform: translateZ(0)`).
+  - Apple’s WebKit engine renders `backdrop-filter: blur(28px) saturate(190%)` directly on the GPU compositor thread at 120 FPS ProMotion with near-zero CPU overhead.
+  - Reserve the fullscreen WebGL2 canvas purely for **ambient, organic fluid background lighting** (`bgPass`), without attempting to mirror DOM element rects into an SDF scene that desyncs during kinetic scroll.
+
+```css
+/* True Apple System Materials (HIG Specification) */
+:root {
+  --material-ultra-thin: rgba(18, 18, 24, 0.45);
+  --material-thin:       rgba(24, 24, 32, 0.62);
+  --material-regular:    rgba(32, 32, 44, 0.76);
+  --material-thick:      rgba(40, 40, 56, 0.88);
+  --glass-border:        rgba(255, 255, 255, 0.12);
+  --glass-border-subtle: rgba(255, 255, 255, 0.06);
+  --glass-highlight:     rgba(255, 255, 255, 0.18);
+  --glass-shadow:        0 8px 32px 0 rgba(0, 0, 0, 0.36);
+}
+
+.native-glass {
+  background: var(--material-thin);
+  -webkit-backdrop-filter: blur(30px) saturate(190%) brightness(1.04);
+  backdrop-filter: blur(30px) saturate(190%) brightness(1.04);
+  border: 0.5px solid var(--glass-border);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+  transform: translateZ(0); /* Promotes to separate GPU compositor layer */
+}
+```
+
+---
+
+## 2. iOS Navigation Bar & Status Bar Protection
+
+### The Missing Top Chrome (`UINavigationBar`)
+Native iOS apps always anchor the view with a frosted translucent top bar that merges seamlessly into the notch/Dynamic Island.
+
+```html
+<!-- Top Navigation Bar -->
+<header id="nav-bar" class="native-nav-bar">
+  <div class="nav-bar-content">
+    <button id="btn-open-sidebar" class="nav-icon-btn" aria-label="Menü" data-haptic="impact-light">
+      <!-- SF Symbol: sidebar.leading -->
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="4"/>
+        <path d="M9 3v18"/>
+      </svg>
+    </button>
+
+    <div class="nav-title-group" id="nav-model-picker">
+      <span class="nav-title">DeepSeek R1</span>
+      <span class="nav-badge">Reasoning</span>
+      <svg class="nav-chevron" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>
+    </div>
+
+    <button id="btn-nav-new-chat" class="nav-icon-btn" aria-label="Új beszélgetés" data-haptic="impact-light">
+      <!-- SF Symbol: square.and.pencil -->
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+      </svg>
+    </button>
+  </div>
+</header>
+```
+
+```css
+.native-nav-bar {
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 250;
+  padding-top: var(--sat);
+  height: calc(48px + var(--sat));
+  background: rgba(9, 9, 15, 0.72);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+  border-bottom: 0.5px solid var(--sep);
+  display: flex;
+  align-items: flex-end;
+}
+.nav-bar-content {
+  width: 100%;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+}
+.nav-title-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.nav-title-group:active {
+  transform: scale(0.96);
+  background: rgba(255, 255, 255, 0.12);
+}
+.nav-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+}
+.nav-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #a0b0ff;
+  background: rgba(160, 176, 255, 0.14);
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+```
+
+### Tap-on-Status-Bar to Scroll to Top
+Every native iOS app scrolls to the top when the user taps the status bar.
+```javascript
+// Tap safe area probe / nav bar to trigger native scrollsToTop
+document.getElementById("nav-bar").addEventListener("click", (e) => {
+  if (e.target.closest("button") || e.target.closest("#nav-model-picker")) return;
+  scrollArea.scrollTo({ top: 0, behavior: "smooth" });
+  if (window.webkit?.messageHandlers?.hapticBridge) {
+    window.webkit.messageHandlers.hapticBridge.postMessage({ type: "selection" });
+  }
+});
+```
+
+---
+
+## 3. Keyboard Handling & The Frosted Input Bar
+
+### 1. Isolated Frosted Input Chrome
+Ensure the input dock has an opaque/frosted barrier so chat history slides *underneath* it cleanly:
+```css
+#ib-wrap {
+  position: sticky;
+  bottom: 0;
+  z-index: 200;
+  background: rgba(9, 9, 15, 0.82) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(190%) !important;
+  backdrop-filter: blur(28px) saturate(190%) !important;
+  border-top: 0.5px solid var(--sep);
+  padding-bottom: calc(var(--sab) + 4px);
+  pointer-events: auto !important;
+}
+```
+
+### 2. Interactive Keyboard Dismiss on Scroll
+In iOS Messages and WhatsApp, dragging down on the message history interactively dismisses the keyboard:
+```javascript
+(function setupInteractiveKeyboardDismiss() {
+  let touchStartY = 0;
+  let isDraggingDown = false;
+
+  scrollArea.addEventListener("touchstart", (e) => {
+    touchStartY = e.touches[0].clientY;
+    isDraggingDown = false;
+  }, { passive: true });
+
+  scrollArea.addEventListener("touchmove", (e) => {
+    const currentY = e.touches[0].clientY;
+    const dy = currentY - touchStartY;
+    
+    // If the keyboard is active and the user drags down on the message list
+    if (document.activeElement === textarea && dy > 14) {
+      isDraggingDown = true;
+      textarea.blur(); // Triggers native keyboard descent
+    }
+  }, { passive: true });
+})();
+```
+
+### 3. Dynamic Attachment Popover Anchor
+Instead of hardcoding `bottom: 88px`, calculate position dynamically relative to `#ib-wrap`'s current bounding rect:
+```javascript
+function positionAttachmentMenu() {
+  const sheet = document.querySelector(".attachment-menu-sheet");
+  const ibWrap = document.getElementById("ib-wrap");
+  if (!sheet || !ibWrap) return;
+  const wrapRect = ibWrap.getBoundingClientRect();
+  // Place menu 10px above the input bar regardless of virtual keyboard state
+  sheet.style.bottom = `${window.innerHeight - wrapRect.top + 10}px`;
+}
+```
+
+---
+
+## 4. Native Gestures & Spring Motion Physics
+
+### 1. Proportional Sidebar Drag with Velocity Flick
+Update Script 8’s sidebar gestures with velocity tracking and 1:1 backdrop dimming:
+```javascript
+(function setupProportionalSidebarDrag() {
+  let touchId = null;
+  let startX = 0, lastX = 0, lastTime = 0, velocityX = 0;
+  const sidebar = document.getElementById("sidebar");
+  const backdrop = document.getElementById("sidebar-backdrop");
+  const drawerWidth = () => Math.min(window.innerWidth * 0.82, 340);
+
+  document.addEventListener("touchstart", (e) => {
+    if (touchId !== null) return;
+    const t = e.changedTouches[0];
+    if (!sbOpen && t.clientX > 32) return; // Edge trigger zone
+    if (e.target.closest("#ta, .cb, .lightbox-stage, input")) return;
+
+    touchId = t.identifier;
+    startX = t.clientX;
+    lastX = t.clientX;
+    lastTime = performance.now();
+    velocityX = 0;
+    sidebar.classList.add("dragging");
+    backdrop.style.transition = "none";
+  }, { passive: true });
+
+  document.addEventListener("touchmove", (e) => {
+    if (touchId === null) return;
+    const t = Array.from(e.changedTouches).find(x => x.identifier === touchId);
+    if (!t) return;
+
+    const now = performance.now();
+    const dt = Math.max(1, now - lastTime);
+    velocityX = (t.clientX - lastX) / dt; // px/ms
+    lastX = t.clientX;
+    lastTime = now;
+
+    const w = drawerWidth();
+    let currentX = sbOpen ? Math.min(0, t.clientX - startX) : Math.min(0, -w + (t.clientX - startX));
+    let progress = (currentX + w) / w; // 0.0 -> 1.0
+
+    sidebar.style.transform = `translateX(${currentX}px)`;
+    backdrop.style.opacity = Math.max(0, Math.min(1, progress)).toFixed(3);
+    backdrop.style.pointerEvents = progress > 0.05 ? "auto" : "none";
+  }, { passive: true });
+
+  document.addEventListener("touchend", (e) => {
+    if (touchId === null) return;
+    const t = Array.from(e.changedTouches).find(x => x.identifier === touchId);
+    if (!t) return;
+
+    sidebar.classList.remove("dragging");
+    sidebar.style.transform = "";
+    backdrop.style.transition = "";
+    backdrop.style.opacity = "";
+    backdrop.style.pointerEvents = "";
+
+    const w = drawerWidth();
+    const finalDeltaX = t.clientX - startX;
+
+    // Velocity-aware decision: a fast flick opens or closes regardless of distance
+    if (!sbOpen) {
+      if (velocityX > 0.35 || finalDeltaX > w * 0.4) openSB();
+      else closeSB();
+    } else {
+      if (velocityX < -0.35 || finalDeltaX < -w * 0.3) closeSB();
+      else openSB();
+    }
+
+    touchId = null;
+  }, { passive: true });
+})();
+```
+
+### 2. Lightbox 1-Finger Pull-Down-to-Dismiss
+Give images the classic iOS Photos / Telegram interaction:
+```javascript
+(function setupLightboxInteractiveDismiss() {
+  const stage = document.getElementById("lightbox-stage");
+  const img = document.getElementById("lightbox-image");
+  const lightbox = document.getElementById("media-lightbox");
+  let startY = 0, currentY = 0, trackingDismiss = false;
+
+  stage.addEventListener("pointerdown", (e) => {
+    if (lightboxZoom > 1.05) return; // Only dismiss when not zoomed
+    startY = e.clientY;
+    currentY = e.clientY;
+    trackingDismiss = true;
+  });
+
+  stage.addEventListener("pointermove", (e) => {
+    if (!trackingDismiss) return;
+    const dy = e.clientY - startY;
+    if (dy > 0) {
+      const scale = Math.max(0.65, 1 - (dy / (window.innerHeight * 1.5)));
+      const opacity = Math.max(0.2, 1 - (dy / 360));
+      img.style.transform = `translate(${lightboxPanX}px, ${dy}px) scale(${scale})`;
+      lightbox.style.backgroundColor = `rgba(0, 0, 0, ${(0.82 * opacity).toFixed(3)})`;
+    }
+  });
+
+  stage.addEventListener("pointerup", (e) => {
+    if (!trackingDismiss) return;
+    trackingDismiss = false;
+    const dy = e.clientY - startY;
+    if (dy > 140) {
+      closeLightbox();
+    } else {
+      // Spring back to centered view
+      img.style.transition = "transform 0.28s cubic-bezier(0.34, 1.36, 0.42, 1)";
+      img.style.transform = "translate(0px, 0px) scale(1)";
+      lightbox.style.backgroundColor = "";
+      setTimeout(() => { img.style.transition = ""; }, 280);
+    }
+  });
+})();
+```
+
+---
+
+## 5. Touch Context Menus & Spring Bubble Interactions
+
+### The Long-Press Haptic Menu on Chat Bubbles
+Instead of desktop `:hover` buttons, implement Apple's `UIContextMenuConfiguration` interaction on message bubbles:
+
+```javascript
+function attachMessageContextMenu(bubbleEl, message, index) {
+  let timer = null;
+  let didLongPress = false;
+
+  const triggerMenu = (x, y) => {
+    didLongPress = true;
+    triggerHaptic("impact-medium");
+    
+    // Spring lift animation on bubble
+    bubbleEl.style.transition = "transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1)";
+    bubbleEl.style.transform = "scale(1.035)";
+
+    const isUser = message.role === "user";
+    const text = contentToDisplay(message.content).text;
+
+    const options = [
+      { label: "Másolás", icon: "doc.on.doc", action: () => writeClipboard(text) },
+      isUser 
+        ? { label: "Szerkesztés", icon: "pencil", action: () => beginEdit(index) }
+        : { label: "Újragenerálás", icon: "arrow.clockwise", action: () => regenerateMessage(index) },
+      { label: "Megosztás", icon: "square.and.arrow.up", action: () => nativeShare(text) }
+    ];
+
+    showAppleContextMenu(x, y, options, () => {
+      bubbleEl.style.transform = "";
+      setTimeout(() => { bubbleEl.style.transition = ""; }, 220);
+    });
+  };
+
+  bubbleEl.addEventListener("touchstart", (e) => {
+    didLongPress = false;
+    const touch = e.touches[0];
+    timer = setTimeout(() => triggerMenu(touch.clientX, touch.clientY), 380);
+  }, { passive: true });
+
+  bubbleEl.addEventListener("touchmove", () => clearTimeout(timer), { passive: true });
+  bubbleEl.addEventListener("touchend", () => clearTimeout(timer), { passive: true });
+  bubbleEl.addEventListener("touchcancel", () => clearTimeout(timer), { passive: true });
+}
+```
+
+### Fix the Truncated User Message Bug
+Add the missing expand/collapse toggle logic in Script 7:
+```javascript
+function inspectUserMessageHeight(bubbleGroup) {
+  const container = bubbleGroup.querySelector(".user-message-collapsible");
+  const textEl = bubbleGroup.querySelector(".user-message-text");
+  if (!container || !textEl) return;
+
+  // 7.5em line-height threshold calculation (~180px)
+  if (textEl.scrollHeight > 185) {
+    container.classList.add("can-collapse");
+    let btn = container.querySelector(".user-message-expand");
+    if (!btn) {
+      btn = document.createElement("button");
+      btn.className = "user-message-expand";
+      btn.type = "button";
+      btn.textContent = "Mutass többet…";
+      btn.addEventListener("click", () => {
+        const isExp = container.classList.toggle("is-expanded");
+        btn.textContent = isExp ? "Kevesebb" : "Mutass többet…";
+      });
+      container.appendChild(btn);
+    }
+  }
+}
+```
+
+---
+
+## 6. Zero-Stutter Streaming Pipeline & Reasoning Timer
+
+### 1. Incremental Markdown Streaming
+Do not call `body.innerHTML = markdown(...)` on every 120ms tick. Instead:
+- Maintain an active text node for streaming tokens.
+- Parse full markdown (code blocks, tables) only when sentence breaks or code block fence closures are detected, or on stream completion.
+- Users can now select and copy text *while the model is generating* without their selection getting wiped.
+
+### 2. Live Reasoning / Chain-of-Thought Timer
+Replace `<summary>Reasoning</summary>` with a dynamic, localized iOS Disclosure Card:
+```html
+<details class="native-thinking-card">
+  <summary class="thinking-summary">
+    <div class="thinking-indicator-pulse"></div>
+    <span class="thinking-label">Gondolkodás…</span>
+    <span class="thinking-timer" id="timer-msg-4">3 mp</span>
+    <svg class="thinking-arrow" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg>
+  </summary>
+  <div class="thinking-content-text">...</div>
+</details>
+```
+When streaming finishes:
+- Update header to: `Gondolkodott 4.2 másodpercig`
+- Change status dot from pulsing yellow to solid subtle gray.
+- Auto-collapse with smooth spring animation if the user hasn't explicitly opened it.
+
+---
+
+## 7. Markdown Enhancements: Tables, LaTeX & Code
+
+Expand the rudimentary regular expressions in `markdown()` into a full-featured native rendering engine:
+
+1. **GFM Tables**: Render markdown tables (`| Column | Column |`) as sleek iOS cards on narrow viewports (`max-width: 600px`), or scrollable frosted tables with sticky headers.
+2. **Inline & Block LaTeX / Math**: Integrate KaTeX / MathJax CSS fonts for formulas (`$\sum_{i=1}^n x_i$`), rendering crisp vector typography instead of raw ASCII.
+3. **Task Lists**: Parse `- [ ]` and `- [x]` into interactive Apple-style circular checkboxes with green checkmarks.
+
+---
+
+## 8. Apple HIG Typography & System Palette
+
+Replace arbitrary CSS values with Apple Human Interface Guidelines tokens:
+
+| Element | Current Web Value | Native Apple HIG Value | CSS Implementation |
+|---|---|---|---|
+| **Body / Message** | `15px / 1.5 / -0.18px` | `17pt Body` | `font-size: 17px; line-height: 22px; letter-spacing: -0.41px;` |
+| **Headline / Titles** | `19px / 1.3 / bold` | `17pt SemiBold` | `font-size: 17px; font-weight: 600; letter-spacing: -0.41px;` |
+| **Subhead / Meta** | `13.5px / 1.45` | `15pt Subheadline` | `font-size: 15px; line-height: 20px; letter-spacing: -0.24px;` |
+| **Footnote / Badge** | `11px / 1.3` | `13pt Footnote` | `font-size: 13px; line-height: 18px; letter-spacing: -0.08px;` |
+| **System Blue** | `#0000ff` (Primary) | iOS Accent Blue | `#0A84FF` (Dark) / `#007AFF` (Light) |
+| **System Green** | `#00ff00` | iOS Success Green | `#30D158` (Dark) / `#34C759` (Light) |
+| **System Red** | `#ff453a` | iOS Destructive Red| `#FF453A` (Dark) / `#FF3B30` (Light) |
+| **Background Tint**| `#000000` / `#09090f` | Apple Deep Obsidian| `#000000` (OLED Pure) or `#0D0E15` |
+
+---
+
+## 9. Comprehensive Haptic Engine & Web Audio Sound Effects
+
+### Universal Haptic Dispatcher
+Support both WKWebView bridge and Web Vibration API:
+```javascript
+function triggerHaptic(style) {
+  // 1. Native WKWebView Bridge
+  if (window.webkit?.messageHandlers?.hapticBridge) {
+    window.webkit.messageHandlers.hapticBridge.postMessage({ type: style, intensity: 1.0 });
+    return;
+  }
+  // 2. Web Vibration API Fallback (Android/PWA)
+  if (navigator.vibrate) {
+    switch (style) {
+      case "impact-light": navigator.vibrate(10); break;
+      case "impact-medium": navigator.vibrate(18); break;
+      case "impact-heavy": navigator.vibrate(28); break;
+      case "selection": navigator.vibrate(6); break;
+      case "notification-success": navigator.vibrate([10, 30, 15]); break;
+      case "notification-error": navigator.vibrate([20, 40, 20, 40, 30]); break;
+    }
+  }
+}
+```
+
+### 2. System Share Sheet (`navigator.share`)
+When tapping "Megosztás" in the message context menu:
+```javascript
+function nativeShare(text) {
+  if (navigator.share) {
+    navigator.share({
+      title: "Chat üzenet",
+      text: text
+    }).catch(() => {});
+  } else {
+    writeClipboard(text).then(() => toast("Szöveg a vágólapra másolva", "ok"));
+  }
+}
+```
+
+---
+
+## 11. Service Worker & Instant Launch Architecture
+
+### Register Offline Service Worker
+Register a lean service worker with `Cache-First` asset caching to ensure instant startup on iOS Home Screen PWAs even when offline:
+```javascript
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  });
+}
+```
+
+### Dynamic App Icon Badge
+Update the favicon/app icon with an active dot when the model is thinking in a background tab:
+```javascript
+function updateAppBadge(inProgress) {
+  if (navigator.setAppBadge) {
+    if (inProgress) navigator.setAppBadge();
+    else navigator.clearAppBadge();
+  }
+}
+```
+
+---
+
+## Summary Action Plan: The Top 5 Immediate Upgrades
+
+1. **Inject the Navigation Bar**: Add `#nav-bar` with the history drawer toggle, model title pill, and new chat button. Chat history now scrolls cleanly beneath a protected status bar.
+2. **Frost the Input Bar**: Add `background: rgba(9, 9, 15, 0.82)` and `backdrop-filter: blur(28px)` to `#ib-wrap`, stopping messages from clashing with the textarea.
+3. **Fix User Message Collapse & Actions**: Add the `.user-message-expand` toggle button for messages over 7 lines, and add touch long-press context menus so mobile users can edit, copy, and regenerate.
+4. **Interactive Keyboard & Dismissal**: Add swipe-down keyboard dismissal on `#scroll-area` and dynamically anchor the attachment popover above the input bar.
+5. **Decouple the Glass Renderers**: Drop runtime Babel and the 100+ React root auto-mounts in favor of native CSS `backdrop-filter`, letting the WebGL2 canvas focus solely on buttery-smooth ambient fluid lighting.

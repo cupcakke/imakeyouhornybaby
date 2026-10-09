@@ -1,1 +1,0 @@
-- [InstaVM VM lifecycle](instavm-vm-lifecycle.md) — treat `killed` as terminal; replace that saved VM with a fresh sandbox.
